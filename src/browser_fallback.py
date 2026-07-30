@@ -6,18 +6,22 @@ import logging
 
 from playwright.async_api import async_playwright
 
-from .config_loader import Config
+from .config_loader import Config, Target
 
 logger = logging.getLogger("watcher.fallback")
 
 
-async def browser_check_dates(config: Config) -> list[str]:
+async def browser_check_dates(config: Config, target: Target | None = None) -> list[str]:
     """Use Playwright to check for available show dates.
 
     This loads the actual SPA in a headless browser and intercepts
     the API responses to extract date information. Used as a fallback
     when direct API calls fail (e.g., due to reCAPTCHA or changed endpoints).
+
+    `target` selects which location to steer the page towards; without one the
+    legacy top-level cinema config is used.
     """
+    location_name = target.location_name if target else config.cinema.location
     dates: list[str] = []
     api_responses: list[dict] = []
 
@@ -72,7 +76,7 @@ async def browser_check_dates(config: Config) -> list[str]:
             selectors = await page.query_selector_all("select, [role='listbox'], .dropdown")
             for sel in selectors:
                 text = await sel.inner_text()
-                if config.cinema.location and config.cinema.location.lower() in text.lower():
+                if location_name and location_name.lower() in text.lower():
                     await sel.click()
                     await page.wait_for_timeout(1000)
         except Exception as e:

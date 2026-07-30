@@ -10,8 +10,10 @@ from pathlib import Path
 from aiohttp import web
 
 from .api_client import CineplexAPI
-from .config_loader import Config, load_config, save_config
-from .monitor import run_monitor, load_state, save_state
+from .config_loader import (
+    Config, LocationRef, MovieConfig, WatchConfig, load_config, save_config,
+)
+from .monitor import run_monitor, load_state, save_state, empty_state, target_dates
 
 logger = logging.getLogger("watcher.web")
 
@@ -32,9 +34,11 @@ class WatcherHub:
         self.stats = {"checks": 0, "alerts": 0, "errors": 0, "started_at": None}
         self.current_dates: list[str] = []
 
-        # Load initial state from disk
+        # Load initial state from disk. The dashboard shows one target at a
+        # time, so it displays the first configured pair.
         state = load_state()
-        self.current_dates = state.get("previous_dates", [])
+        targets = config.targets()
+        self.current_dates = target_dates(state, targets[0]) if targets else []
 
     async def on_event(self, event: dict) -> None:
         """Callback from the monitor loop — broadcast to all SSE clients."""
@@ -110,6 +114,15 @@ class WatcherHub:
         if was_running:
             await self.stop()
 
+        # The dashboard manages a single pair, so it replaces the watch list
+        # outright. Multi-target setups are configured via config.yaml or
+        # `python main.py setup`.
+        self.config.watches = [
+            WatchConfig(
+                movie=MovieConfig(id=movie_id, name=movie_name),
+                locations=[LocationRef(id=location_id, name=location_name)],
+            )
+        ]
         self.config.cinema.location_id = location_id
         self.config.cinema.location = location_name
         self.config.movie.id = movie_id
@@ -118,7 +131,7 @@ class WatcherHub:
 
         # Reset state for fresh detection
         self.current_dates = []
-        save_state({"previous_dates": [], "last_check": None})
+        save_state(empty_state())
 
         await self.broadcast({
             "type": "config_changed",
@@ -148,12 +161,24 @@ class WatcherHub:
                 pass
 
     def get_status(self) -> dict:
+        targets = self.config.targets()
+        first = targets[0] if targets else None
         return {
             "running": self.running,
-            "movie": self.config.movie.name or "",
-            "movie_id": self.config.movie.id,
-            "location": self.config.cinema.location or "",
-            "location_id": self.config.cinema.location_id,
+            "targets": [
+                {
+                    "key": t.key,
+                    "movie": t.movie_name,
+                    "movie_id": t.movie_id,
+                    "location": t.location_name,
+                    "location_id": t.location_id,
+                }
+                for t in targets
+            ],
+            "movie": first.movie_name if first else "",
+            "movie_id": first.movie_id if first else None,
+            "location": first.location_name if first else "",
+            "location_id": first.location_id if first else None,
             "interval": self.config.monitoring.interval_seconds,
             "dates": self.current_dates,
             "stats": self.stats,

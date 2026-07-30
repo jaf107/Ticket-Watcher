@@ -83,6 +83,37 @@ A Python tool to monitor CineplexBD for new movie ticket availability and get in
 2. **Edit config.yaml** (optional)
    - Adjust monitoring interval, notification settings, etc.
 
+#### Watching several movies and locations
+
+`watches` holds any number of movies, each with its own list of locations.
+Every movie+location pair is tracked separately, so an alert always names
+exactly where the new dates appeared.
+
+```yaml
+watches:
+  - movie:
+      name: "Spider-Man: Brand New Day (2D)"
+      id: 1716
+    locations:
+      - id: 1
+        name: Bashundhara Shopping Mall, Panthapath
+      - id: 3
+        name: Star Cineplex, SKS Tower, Mohakhali
+  - movie:
+      name: "Avengers: Doomsday"
+      id: 1707
+    locations:
+      - 5     # bare IDs work too — names are resolved at runtime
+```
+
+`python main.py setup` writes this for you: select several locations with
+`1,3,5`, then several movies the same way. Movies are only paired with the
+locations that actually show them.
+
+Note: the Playwright fallback (`monitoring.fallback_to_browser`) only applies
+when a single pair is configured. It scrapes every date on the site and cannot
+attribute them to a specific movie, so it is skipped for multi-pair setups.
+
 3. **Configure Telegram notifications** (optional)
    - [Create a Telegram bot](https://core.telegram.org/bots#6-botfather)
    - Get your `TELEGRAM_BOT_TOKEN` from BotFather
@@ -93,6 +124,26 @@ A Python tool to monitor CineplexBD for new movie ticket availability and get in
      TELEGRAM_CHAT_ID=your_chat_id_here
      ```
    - In `config.yaml`, set `notifications.telegram.enabled: true`
+
+#### Notifying several people
+
+Add everyone's chat ID to `chat_ids`. All of them receive every alert, and one
+unreachable recipient never blocks delivery to the rest.
+
+```yaml
+notifications:
+  telegram:
+    chat_id: "8600743805"      # you
+    chat_ids:
+      - "111222333"            # a friend
+      - "-1001234567890"       # or a group chat
+```
+
+Each person must send `/start` to your bot first — Telegram refuses to let a
+bot message someone who has not opened the conversation. For a group, add the
+bot to it and use the group's negative chat ID.
+
+In CI, use `TELEGRAM_CHAT_IDS=111,222` (comma-separated) instead.
 
 #### How to get your Telegram Chat ID
 1. Start a chat with your bot on Telegram.

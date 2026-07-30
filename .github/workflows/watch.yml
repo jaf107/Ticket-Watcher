@@ -50,9 +50,14 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
+          # WATCH_TARGETS ("1716@1,1716@3,1707@5") tracks arbitrary
+          # movie/location pairs and overrides the single-pair vars below.
+          WATCH_TARGETS: ${{ vars.WATCH_TARGETS }}
           MOVIE_ID: ${{ vars.MOVIE_ID }}
           MOVIE_NAME: ${{ vars.MOVIE_NAME }}
           LOCATION_ID: ${{ vars.LOCATION_ID }}
+          LOCATION_IDS: ${{ vars.LOCATION_IDS }}
           LOCATION_NAME: ${{ vars.LOCATION_NAME }}
           PYTHONUNBUFFERED: "1"
         run: python -u main.py watch --once
@@ -62,9 +67,14 @@ jobs:
         env:
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          TELEGRAM_CHAT_IDS: ${{ secrets.TELEGRAM_CHAT_IDS }}
+          # WATCH_TARGETS ("1716@1,1716@3,1707@5") tracks arbitrary
+          # movie/location pairs and overrides the single-pair vars below.
+          WATCH_TARGETS: ${{ vars.WATCH_TARGETS }}
           MOVIE_ID: ${{ vars.MOVIE_ID }}
           MOVIE_NAME: ${{ vars.MOVIE_NAME }}
           LOCATION_ID: ${{ vars.LOCATION_ID }}
+          LOCATION_IDS: ${{ vars.LOCATION_IDS }}
           LOCATION_NAME: ${{ vars.LOCATION_NAME }}
           PYTHONUNBUFFERED: "1"
         run: python -u main.py test-notify

@@ -117,15 +117,41 @@ async def cmd_list_movies(args) -> None:
         await api.close()
 
 
+def _prompt_selection(prompt: str, count: int) -> list[int]:
+    """Ask for one or more 1-based indices, e.g. `1,3,5`. Returns 0-based."""
+    while True:
+        try:
+            raw = input(prompt).strip()
+        except EOFError:
+            return []
+        picks = []
+        for part in raw.replace(" ", ",").split(","):
+            if not part:
+                continue
+            try:
+                value = int(part)
+            except ValueError:
+                picks = []
+                break
+            if not 1 <= value <= count:
+                picks = []
+                break
+            if value - 1 not in picks:
+                picks.append(value - 1)
+        if picks:
+            return picks
+        print(f"Invalid choice — enter numbers between 1 and {count}, separated by commas.")
+
+
 async def cmd_setup(args) -> None:
-    """Interactive setup: pick location and movie."""
+    """Interactive setup: pick any number of movie/location pairs."""
     from src.api_client import CineplexAPI
+    from src.config_loader import LocationRef, MovieConfig, WatchConfig
 
     config = load_config()
     api = CineplexAPI()
 
     try:
-        # Step 1: Pick location
         print("Fetching locations...")
         locations = await api.get_locations()
         if not locations:
@@ -137,64 +163,84 @@ async def cmd_setup(args) -> None:
             title = loc.get("locationTitle") or loc.get("location_name", "Unknown")
             print(f"  {i:2d}. [{loc['id']}] {title}")
 
-        while True:
-            try:
-                choice = int(input(f"\nSelect location (1-{len(locations)}): "))
-                if 1 <= choice <= len(locations):
-                    selected_loc = locations[choice - 1]
-                    break
-            except (ValueError, EOFError):
-                pass
-            print("Invalid choice, try again.")
-
-        loc_title = selected_loc.get("locationTitle") or selected_loc.get("location_name", "")
-        config.cinema.location = loc_title
-        config.cinema.location_id = selected_loc["id"]
-        print(f"Selected location: {loc_title}")
-
-        # Step 2: Pick movie
-        print("\nFetching movies...")
-        data = await api.get_movies(selected_loc["id"])
-        running = data.get("running", [])
-        upcoming = data.get("upcoming", [])
-        all_movies = running + upcoming
-
-        if not all_movies:
-            print("No movies found at this location.")
+        picks = _prompt_selection(
+            f"\nSelect location(s) 1-{len(locations)} (comma-separated): ", len(locations)
+        )
+        if not picks:
+            print("Nothing selected.")
             return
 
-        print(f"\nAvailable movies ({len(all_movies)}):\n")
-        for i, m in enumerate(all_movies, 1):
-            status = "NOW SHOWING" if m in running else "COMING SOON"
-            print(f"  {i:2d}. {m['title']} [{status}]")
-            print(f"      {m.get('genre', '')} | {m.get('language', '')}")
+        selected_locs = [locations[i] for i in picks]
+        for loc in selected_locs:
+            print(f"Selected: {loc.get('locationTitle') or loc.get('location_name', '')}")
 
-        while True:
+        # Collect movies per location so a movie is only paired with the
+        # locations that actually show it.
+        print("\nFetching movies...")
+        catalog: dict[int, dict] = {}
+        for loc in selected_locs:
+            data = await api.get_movies(loc["id"])
+            for movie in [*data.get("running", []), *data.get("upcoming", [])]:
+                entry = catalog.setdefault(
+                    int(movie["movie_id"]),
+                    {"title": movie["title"], "locations": [], "meta": movie},
+                )
+                entry["locations"].append(loc)
+
+        if not catalog:
+            print("No movies found at the selected location(s).")
+            return
+
+        movies = list(catalog.values())
+        print(f"\nAvailable movies ({len(movies)}):\n")
+        for i, entry in enumerate(movies, 1):
+            meta = entry["meta"]
+            where = f"{len(entry['locations'])}/{len(selected_locs)} selected location(s)"
+            print(f"  {i:2d}. {entry['title']} — {where}")
+            print(f"      {meta.get('genre', '')} | {meta.get('language', '')}")
+
+        picks = _prompt_selection(
+            f"\nSelect movie(s) 1-{len(movies)} (comma-separated): ", len(movies)
+        )
+        if not picks:
+            print("Nothing selected.")
+            return
+
+        watches = []
+        for index in picks:
+            entry = movies[index]
+            movie_id = int(entry["meta"]["movie_id"])
+            watches.append(
+                WatchConfig(
+                    movie=MovieConfig(id=movie_id, name=entry["title"]),
+                    locations=[
+                        LocationRef(
+                            id=int(loc["id"]),
+                            name=loc.get("locationTitle") or loc.get("location_name", ""),
+                        )
+                        for loc in entry["locations"]
+                    ],
+                )
+            )
+
+        config.watches = watches
+        targets = config.targets()
+
+        print(f"\nWatching {len(targets)} pair(s). Checking current showtimes...")
+        for target in targets:
             try:
-                choice = int(input(f"\nSelect movie (1-{len(all_movies)}): "))
-                if 1 <= choice <= len(all_movies):
-                    selected_movie = all_movies[choice - 1]
-                    break
-            except (ValueError, EOFError):
-                pass
-            print("Invalid choice, try again.")
+                dates = await api.get_movie_dates(target.location_id, target.movie_id)
+            except Exception as e:
+                print(f"  {target.label}: could not check ({e})")
+                continue
+            if dates:
+                print(f"  {target.label}: {', '.join(dates)}")
+            else:
+                print(f"  {target.label}: no dates yet — you'll be alerted when they appear")
 
-        config.movie.name = selected_movie["title"]
-        config.movie.id = selected_movie["movie_id"]
-        print(f"Selected movie: {selected_movie['title']} (ID: {selected_movie['movie_id']})")
-
-        # Step 3: Quick test — show current showtimes
-        print("\nChecking current showtimes...")
-        dates = await api.get_movie_dates(selected_loc["id"], selected_movie["movie_id"])
-        if dates:
-            print(f"Currently showing on: {', '.join(dates)}")
-        else:
-            print("No showtimes yet — the watcher will alert you when dates appear!")
-
-        # Save
         save_config(config)
-        print(f"\nConfig saved to config.yaml!")
-        print(f"Run 'python main.py watch' to start monitoring.")
+        print("\nConfig saved to config.yaml!")
+        print("Run 'python main.py watch' to start monitoring.")
 
     except Exception as e:
         print(f"Error: {e}")
@@ -208,8 +254,8 @@ async def cmd_watch(args) -> None:
 
     config = load_config()
 
-    if not config.movie.id or not config.cinema.location_id:
-        print("Movie and location not configured yet.")
+    if not config.targets():
+        print("No movie/location pairs configured yet.")
         print("Run 'python main.py setup' first.")
         return
 
@@ -225,12 +271,17 @@ async def cmd_test_notify(args) -> None:
     config = load_config()
     notifier = Notifier.from_config(config)
 
-    movie = config.movie.name or f"ID: {config.movie.id}"
-    location = config.cinema.location or f"ID: {config.cinema.location_id}"
+    targets = config.targets()
+    watching = "\n".join(f"- {t.label}" for t in targets) or "- nothing configured yet"
+    recipients = config.notifications.telegram.recipients()
 
-    print("Sending test notifications...")
+    print(f"Sending test notifications to {len(recipients)} Telegram recipient(s)...")
     await notifier.notify_all(
-        message=f"This is a test from CineplexBD Ticket Watcher!\nIf you see this, notifications are working.\n\nWatching: {movie}\nLocation: {location}",
+        message=(
+            "This is a test from CineplexBD Ticket Watcher!\n"
+            "If you see this, notifications are working.\n\n"
+            f"Watching {len(targets)} pair(s):\n{watching}"
+        ),
         title="Test Notification",
     )
     print("Done! Check your desktop and Telegram.")
@@ -275,27 +326,40 @@ async def cmd_dashboard(args) -> None:
 
 async def cmd_status(args) -> None:
     """Show current watcher status."""
+    from src.monitor import load_state, migrate_state, target_dates
+
     config = load_config()
+    targets = config.targets()
+    recipients = config.notifications.telegram.recipients()
 
     print("CineplexBD Ticket Watcher — Status")
     print("=" * 40)
-    print(f"Movie:    {config.movie.name or 'Not set'} (ID: {config.movie.id})")
-    print(f"Location: {config.cinema.location or 'Not set'} (ID: {config.cinema.location_id})")
     print(f"Interval: {config.monitoring.interval_seconds}s")
     print(f"Desktop:  {'ON' if config.notifications.desktop.enabled else 'OFF'}")
-    print(f"Telegram: {'ON' if config.notifications.telegram.enabled else 'OFF'}")
+    telegram_state = "ON" if config.notifications.telegram.enabled else "OFF"
+    print(f"Telegram: {telegram_state} ({len(recipients)} recipient(s))")
 
-    state_path = Path("data/state.json")
-    if state_path.exists():
-        with open(state_path, "r") as f:
-            state = json.load(f)
-        known = state.get("previous_dates", state.get("known_dates", []))
-        print(f"\nAvailable dates: {len(known)}")
-        for d in sorted(known):
-            print(f"  - {d}")
-        print(f"Last check: {state.get('last_check', 'never')}")
-    else:
-        print("\nNo state yet (haven't run watch)")
+    if not targets:
+        print("\nNo movie/location pairs configured. Run 'python main.py setup'.")
+        return
+
+    if not Path("data/state.json").exists():
+        print(f"\nWatching {len(targets)} pair(s) — no state yet (haven't run watch):")
+        for target in targets:
+            print(f"  - {target.label}")
+        return
+
+    state = migrate_state(load_state(), config.legacy_target_key())
+    print(f"\nWatching {len(targets)} pair(s):")
+    for target in targets:
+        dates = target_dates(state, target)
+        print(f"\n  {target.label}")
+        if dates:
+            for d in sorted(dates):
+                print(f"    - {d}")
+        else:
+            print("    (no dates seen yet)")
+    print(f"\nLast check: {state.get('last_check') or 'never'}")
 
 
 def main():

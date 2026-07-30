@@ -1,33 +1,45 @@
 # CineplexBD Ticket Watcher — config template
 # Copy this to config.yaml and fill in your values.
-# Run 'python main.py setup' to auto-fill movie & location.
+# Run 'python main.py setup' to auto-fill movies & locations.
 
-movie:
-  name: ""
-  id: null
-
-cinema:
-  location: ""
-  location_id: null
-  name: ""
-  id: null
+# Each watch is one movie tracked at one or more locations. Every
+# movie+location pair is checked and alerted on independently.
+watches:
+  - movie:
+      name: "Spider-Man: Brand New Day (2D)"
+      id: 1716
+    locations:
+      - id: 1
+        name: Bashundhara Shopping Mall, Panthapath
+      - id: 3
+        name: Star Cineplex, SKS Tower, Mohakhali
+  - movie:
+      name: "Avengers: Doomsday"
+      id: 1707
+    locations:
+      - 5                      # Bare IDs work too; names are resolved at runtime
 
 monitoring:
   interval_seconds: 60       # How often to check (minimum 30s)
   max_duration_minutes: 0    # 0 = run indefinitely
   max_consecutive_errors: 10 # Switch to browser fallback after this many errors
-  fallback_to_browser: true
+  fallback_to_browser: true  # Only usable with a single watched pair — the
+                             # scraper cannot tell which movie a date belongs to
 
 notifications:
   desktop:
-    enabled: false           # Windows toast notifications
+    enabled: false           # Native toast (Windows, macOS, Linux)
   telegram:
     enabled: true
     # Put secrets in .env instead:
     #   TELEGRAM_BOT_TOKEN=...
     #   TELEGRAM_CHAT_ID=...
+    #   TELEGRAM_CHAT_IDS=111,222   (comma-separated, for several people)
     bot_token: ""
     chat_id: ""
+    # Everyone listed here gets every alert. Each person must send /start to
+    # the bot first — Telegram blocks bots from messaging strangers.
+    chat_ids: []
 
 logging:
   level: INFO
