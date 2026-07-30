@@ -1,0 +1,39 @@
+# Fly.io deployment for the Ticket Watcher dashboard + continuous monitor.
+# Set the app name to whatever `fly launch --no-deploy` generated for you.
+app = "ticket-watcher"
+primary_region = "sin"   # Singapore — closest Fly region to Dhaka
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  WATCHER_DATA_DIR = "/data"
+  HOST = "0.0.0.0"
+  PORT = "8080"
+  AUTO_START = "1"
+
+# State must persist across deploys, otherwise each release rebaselines and
+# the first check after every deploy reports existing dates as new.
+[mounts]
+  source = "watcher_data"
+  destination = "/data"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  # The monitor has to keep running when nobody has the dashboard open, so the
+  # machine must never be stopped or suspended for being idle.
+  auto_stop_machines = false
+  auto_start_machines = true
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "20s"
+    method = "GET"
+    path = "/api/health"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "512mb"   # Chromium needs headroom during the guest-login step

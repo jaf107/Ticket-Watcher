@@ -293,21 +293,34 @@ async def cmd_dashboard(args) -> None:
     from aiohttp import web
     from src.web_server import WatcherHub, create_app
 
+    from src.web_server import dashboard_password
+
     config = load_config()
     hub = WatcherHub(config)
     app = create_app(hub)
 
-    port = args.port or 5096
+    port = int(os.environ.get("PORT") or args.port or 5096)
+    host = args.host or os.environ.get("HOST") or "localhost"
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, "localhost", port)
+    site = web.TCPSite(runner, host, port)
     await site.start()
 
     url = f"http://localhost:{port}"
-    print(f"Dashboard running at {url}")
+    print(f"Dashboard running on {host}:{port}")
+
+    if host not in ("localhost", "127.0.0.1") and not dashboard_password():
+        print("WARNING: bound to a public interface with no DASHBOARD_PASSWORD set.")
+        print("         Anyone who reaches this port can edit your config.")
+
     print("Press Ctrl+C to stop.\n")
 
-    if not args.no_browser:
+    # Hosted deployments have nobody to click Start, so let them watch on boot.
+    if args.autostart or os.environ.get("AUTO_START", "").lower() in ("1", "true", "yes"):
+        await hub.start()
+        print("Monitor auto-started.")
+
+    if not args.no_browser and host in ("localhost", "127.0.0.1"):
         webbrowser.open(url)
 
     stop = asyncio.Event()
@@ -392,8 +405,10 @@ Commands:
     p_watch.add_argument("--once", action="store_true", help="Run a single check and exit (for CI/cron)")
 
     p_dash = sub.add_parser("dashboard", help="Launch web dashboard")
-    p_dash.add_argument("--port", type=int, default=5096, help="Port (default: 5096)")
+    p_dash.add_argument("--port", type=int, default=5096, help="Port (default: 5096, or $PORT)")
+    p_dash.add_argument("--host", default=None, help="Bind address (default: localhost, or $HOST)")
     p_dash.add_argument("--no-browser", action="store_true", help="Don't auto-open browser")
+    p_dash.add_argument("--autostart", action="store_true", help="Start watching immediately")
 
     sub.add_parser("test-notify", help="Test notifications")
     sub.add_parser("status", help="Show status")

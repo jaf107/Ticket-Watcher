@@ -1,0 +1,19 @@
+# Secrets and local state must never reach the image — the running container
+# gets them from environment variables and the mounted volume instead.
+config.yaml
+.env
+data/
+*.log
+
+.git/
+.github/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+*.bat
+*.spec
+*.html
+!src/dashboard.html
+README.md

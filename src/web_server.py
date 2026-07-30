@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 import asyncio
+import hashlib
+import hmac
 import json
 import logging
+import os
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -19,6 +22,111 @@ from .monitor import run_monitor, load_state, save_state, empty_state, target_da
 logger = logging.getLogger("watcher.web")
 
 DASHBOARD_PATH = Path(__file__).parent / "dashboard.html"
+SESSION_COOKIE = "tw_session"
+
+LOGIN_PAGE = """<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ticket Watcher — Sign in</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%8E%AC%3C/text%3E%3C/svg%3E">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-serif;
+       background:#0c0c1d;color:#e2e8f0;min-height:100vh;
+       display:flex;align-items:center;justify-content:center;padding:1.5rem}
+  .card{background:#161630;border:1px solid #2a2a50;border-radius:12px;
+        padding:2rem;width:100%;max-width:360px}
+  .icon{width:48px;height:48px;background:linear-gradient(135deg,#7c3aed,#5b21b6);
+        border-radius:14px;display:flex;align-items:center;justify-content:center;
+        font-size:24px;margin-bottom:1.25rem}
+  h1{font-size:1.15rem;margin-bottom:0.35rem}
+  p{font-size:0.85rem;color:#94a3b8;margin-bottom:1.5rem}
+  input{width:100%;padding:10px 12px;background:#0c0c1d;color:#e2e8f0;
+        border:1px solid #2a2a50;border-radius:8px;font-size:0.9rem;font-family:inherit}
+  input:focus{border-color:#7c3aed;outline:none}
+  button{width:100%;margin-top:0.75rem;padding:10px;background:#7c3aed;color:#fff;
+         border:none;border-radius:8px;font-size:0.9rem;font-weight:600;
+         cursor:pointer;font-family:inherit}
+  button:hover{background:#5b21b6}
+  .err{margin-top:0.75rem;font-size:0.82rem;color:#ef4444}
+</style></head><body>
+<form class="card" method="POST" action="/login">
+  <div class="icon">&#127916;</div>
+  <h1>Ticket Watcher</h1>
+  <p>Enter the dashboard password to continue.</p>
+  <input type="password" name="password" placeholder="Password" autofocus required>
+  <button type="submit">Sign in</button>
+  __ERROR__
+</form></body></html>
+"""
+
+
+def dashboard_password() -> str:
+    """Password gating the dashboard. Empty means auth is disabled."""
+    return os.environ.get("DASHBOARD_PASSWORD", "").strip()
+
+
+def _session_token(password: str) -> str:
+    """Cookie value proving knowledge of the password.
+
+    Derived rather than random so it survives restarts without server-side
+    session storage, and changes the moment the password does.
+    """
+    return hmac.new(password.encode(), b"ticket-watcher-session", hashlib.sha256).hexdigest()
+
+
+def is_authenticated(request: web.Request) -> bool:
+    password = dashboard_password()
+    if not password:
+        return True
+    cookie = request.cookies.get(SESSION_COOKIE, "")
+    return hmac.compare_digest(cookie, _session_token(password))
+
+
+@web.middleware
+async def auth_middleware(request: web.Request, handler):
+    """Gate everything except login and the unauthenticated health check."""
+    if request.path in ("/login", "/api/health") or is_authenticated(request):
+        return await handler(request)
+
+    if request.path.startswith("/api/"):
+        return web.json_response({"ok": False, "message": "Not authenticated"}, status=401)
+    raise web.HTTPFound("/login")
+
+
+async def handle_login_page(request: web.Request) -> web.Response:
+    if is_authenticated(request):
+        raise web.HTTPFound("/")
+    return web.Response(
+        text=LOGIN_PAGE.replace("__ERROR__", ""),
+        content_type="text/html",
+    )
+
+
+async def handle_login(request: web.Request) -> web.Response:
+    password = dashboard_password()
+    form = await request.post()
+    supplied = str(form.get("password", ""))
+
+    if not password or not hmac.compare_digest(supplied, password):
+        # Uniform delay so a wrong password cannot be distinguished by timing.
+        await asyncio.sleep(1)
+        return web.Response(
+            text=LOGIN_PAGE.replace("__ERROR__", '<div class="err">Wrong password.</div>'),
+            content_type="text/html",
+            status=401,
+        )
+
+    response = web.HTTPFound("/")
+    response.set_cookie(
+        SESSION_COOKIE,
+        _session_token(password),
+        httponly=True,
+        samesite="Lax",
+        secure=request.url.scheme == "https",
+        max_age=30 * 24 * 3600,
+    )
+    return response
 
 
 class WatcherHub:
@@ -518,6 +626,24 @@ async def handle_test_notify(request: web.Request) -> web.Response:
     })
 
 
+async def handle_health(request: web.Request) -> web.Response:
+    """Unauthenticated liveness probe for the external watchdog.
+
+    Deliberately exposes no config: whether the loop is running, how many pairs
+    it covers, and when it last completed a check — enough to alert on, nothing
+    worth hiding.
+    """
+    hub: WatcherHub = request.app["hub"]
+    state = load_state()
+    return web.json_response({
+        "ok": True,
+        "running": hub.running,
+        "targets": len(hub.config.targets()),
+        "checks": hub.stats.get("checks", 0),
+        "last_check": state.get("last_check"),
+    })
+
+
 async def handle_events(request: web.Request) -> web.StreamResponse:
     hub: WatcherHub = request.app["hub"]
 
@@ -550,9 +676,12 @@ async def handle_events(request: web.Request) -> web.StreamResponse:
 
 
 def create_app(hub: WatcherHub) -> web.Application:
-    app = web.Application()
+    app = web.Application(middlewares=[auth_middleware])
     app["hub"] = hub
 
+    app.router.add_get("/login", handle_login_page)
+    app.router.add_post("/login", handle_login)
+    app.router.add_get("/api/health", handle_health)
     app.router.add_get("/", handle_index)
     app.router.add_get("/api/status", handle_status)
     app.router.add_get("/api/events", handle_events)

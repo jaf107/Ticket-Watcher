@@ -4,6 +4,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import os
 import signal
 from collections.abc import Awaitable, Callable
 from datetime import datetime, timezone
@@ -15,7 +16,9 @@ from .notifier import Notifier
 
 logger = logging.getLogger("watcher.monitor")
 
-DATA_DIR = Path(__file__).parent.parent / "data"
+# WATCHER_DATA_DIR lets a deployment point state at a mounted volume, so
+# baselines survive redeploys instead of rescanning as if brand new.
+DATA_DIR = Path(os.environ.get("WATCHER_DATA_DIR") or Path(__file__).parent.parent / "data")
 STATE_PATH = DATA_DIR / "state.json"
 STATE_VERSION = 2
 

@@ -184,10 +184,23 @@ def _parse_watch_targets(raw: str) -> list[WatchConfig]:
     return list(by_movie.values())
 
 
+def default_config_path() -> Path:
+    """Where config.yaml lives.
+
+    WATCHER_CONFIG lets a deployment place it on a mounted volume, so edits
+    made from the dashboard survive a redeploy rather than resetting to the
+    image's contents.
+    """
+    override = os.environ.get("WATCHER_CONFIG")
+    if override:
+        return Path(override)
+    return Path(__file__).parent.parent / "config.yaml"
+
+
 def load_config(path: str | Path | None = None) -> Config:
     """Load config from YAML file with env var overrides for secrets."""
     if path is None:
-        path = Path(__file__).parent.parent / "config.yaml"
+        path = default_config_path()
     path = Path(path)
 
     if not path.exists():
@@ -262,8 +275,9 @@ def load_config(path: str | Path | None = None) -> Config:
 def save_config(config: Config, path: str | Path | None = None) -> None:
     """Save config back to YAML."""
     if path is None:
-        path = Path(__file__).parent.parent / "config.yaml"
+        path = default_config_path()
     path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
 
     data = config.model_dump()
     with open(path, "w", encoding="utf-8") as f:
