@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 import logging
+import shutil
+import subprocess
 import sys
 import webbrowser
 
@@ -25,36 +27,84 @@ async def send_telegram(bot_token: str, chat_id: str, message: str) -> bool:
         return False
 
     url = TELEGRAM_API.format(token=bot_token)
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(url, json={
-                "chat_id": chat_id,
-                "text": message,
-                "parse_mode": "HTML",
-            })
-            if resp.status_code == 200:
-                logger.info("Telegram notification sent")
-                return True
-            else:
+    payload = {"chat_id": chat_id, "text": message, "parse_mode": "HTML"}
+
+    # The first connect can be slow (TLS + DNS on a cold network), so allow a
+    # generous timeout and retry once before giving up on an alert.
+    for attempt in range(1, 3):
+        try:
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                resp = await client.post(url, json=payload)
+                if resp.status_code == 200:
+                    logger.info("Telegram notification sent")
+                    return True
                 logger.error(f"Telegram API returned {resp.status_code}: {resp.text}")
                 return False
-    except Exception as e:
-        logger.error(f"Telegram send failed: {e}")
+        except Exception as e:
+            logger.error(f"Telegram send failed (attempt {attempt}/2): {type(e).__name__}: {e}")
+
+    return False
+
+
+CINEPLEX_URL = "https://www.cineplexbd.com/"
+
+
+def _applescript_string(text: str) -> str:
+    """Quote a Python string as an AppleScript literal."""
+    escaped = text.replace("\\", "\\\\").replace('"', '\\"')
+    return '"' + escaped.replace("\n", " ") + '"'
+
+
+def _notify_windows(title: str, message: str) -> bool:
+    from winotify import Notification
+    toast = Notification(
+        app_id="CineplexBD Ticket Watcher",
+        title=title,
+        msg=message,
+        duration="long",
+    )
+    toast.add_actions(label="Open CineplexBD", launch=CINEPLEX_URL)
+    toast.show()
+    return True
+
+
+def _notify_macos(title: str, message: str) -> bool:
+    """Notification Center alert. Sound is handled by play_alert_sound()."""
+    if shutil.which("terminal-notifier"):
+        subprocess.run(
+            ["terminal-notifier", "-title", title, "-message", message, "-open", CINEPLEX_URL],
+            check=True,
+            timeout=10,
+            capture_output=True,
+        )
+        return True
+
+    script = (
+        f"display notification {_applescript_string(message)} "
+        f"with title {_applescript_string(title)}"
+    )
+    subprocess.run(["osascript", "-e", script], check=True, timeout=10, capture_output=True)
+    return True
+
+
+def _notify_linux(title: str, message: str) -> bool:
+    if not shutil.which("notify-send"):
+        logger.warning("notify-send not found — skipping desktop notification")
         return False
+    subprocess.run(["notify-send", title, message], check=True, timeout=10, capture_output=True)
+    return True
 
 
 def send_desktop_notification(title: str, message: str) -> bool:
-    """Show a Windows 11 toast notification."""
+    """Show a native desktop notification on Windows, macOS, or Linux."""
+    backends = {
+        "win32": _notify_windows,
+        "darwin": _notify_macos,
+    }
+    backend = backends.get(sys.platform, _notify_linux)
+
     try:
-        from winotify import Notification
-        toast = Notification(
-            app_id="CineplexBD Ticket Watcher",
-            title=title,
-            msg=message,
-            duration="long",
-        )
-        toast.add_actions(label="Open CineplexBD", launch="https://www.cineplexbd.com/")
-        toast.show()
+        backend(title, message)
         logger.info("Desktop notification sent")
         return True
     except ImportError:
@@ -66,16 +116,22 @@ def send_desktop_notification(title: str, message: str) -> bool:
 
 
 def play_alert_sound() -> None:
-    """Play an alert sound (Windows only, no-op on other platforms)."""
-    if not winsound:
-        return
+    """Play an alert sound. No-op where no player is available."""
+    from pathlib import Path
+
+    sound_file = Path(__file__).parent.parent / "sounds" / "alert.wav"
+
     try:
-        from pathlib import Path
-        sound_file = Path(__file__).parent.parent / "sounds" / "alert.wav"
-        if sound_file.exists():
-            winsound.PlaySound(str(sound_file), winsound.SND_FILENAME | winsound.SND_ASYNC)
-        else:
-            winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+        if winsound:
+            if sound_file.exists():
+                winsound.PlaySound(str(sound_file), winsound.SND_FILENAME | winsound.SND_ASYNC)
+            else:
+                winsound.MessageBeep(winsound.MB_ICONEXCLAMATION)
+        elif sys.platform == "darwin":
+            target = sound_file if sound_file.exists() else Path("/System/Library/Sounds/Glass.aiff")
+            subprocess.Popen(["afplay", str(target)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elif sound_file.exists() and shutil.which("paplay"):
+            subprocess.Popen(["paplay", str(sound_file)], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     except Exception as e:
         logger.warning(f"Could not play sound: {e}")
 
