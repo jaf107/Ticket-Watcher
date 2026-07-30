@@ -286,6 +286,48 @@ class CineplexAPI:
 
     # --- Web API methods (for browsing/setup) ---
 
+    async def get_locations_web(self) -> list[dict]:
+        """Locations from the web API — no reCAPTCHA, so it still resolves
+        names when the ticket login is unavailable.
+
+        Returns: [{id, location_name, short_name, ...}, ...]
+        """
+        data = await self._web_post("location")
+        return data if isinstance(data, list) else []
+
+    async def get_scheduled_dates(
+        self, location_id: int, movie_id: int, days_ahead: int = 45
+    ) -> list[str]:
+        """Dates a movie has showtimes scheduled for, from the web API.
+
+        This is a superset of the purchasable dates and needs no reCAPTCHA, so
+        unlike get_movie_dates it works from a datacenter IP — which is what
+        makes scheduled checks viable on CI runners. A date appearing here
+        means the schedule is published, not that seats are on sale yet.
+        """
+        from datetime import date, timedelta
+
+        today = date.today()
+        rows = await self._web_post("movie-show-time", {
+            "location": location_id,
+            "date_from": today.isoformat(),
+            "date_to": (today + timedelta(days=days_ahead)).isoformat(),
+        })
+
+        if not isinstance(rows, list):
+            return []
+
+        for row in rows:
+            if row.get("movie_id") != movie_id:
+                continue
+            dates = {
+                entry["raw_date"]
+                for entry in row.get("show_time") or []
+                if entry.get("raw_date")
+            }
+            return sorted(dates)
+        return []
+
     async def get_movies(self, location_id: int = 1) -> dict:
         """Fetch movie list from web API (running + upcoming).
 

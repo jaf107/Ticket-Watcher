@@ -379,13 +379,14 @@ async def cmd_status(args) -> None:
     state = migrate_state(load_state(), config.legacy_target_key())
     print(f"\nWatching {len(targets)} pair(s):")
     for target in targets:
-        dates = target_dates(state, target)
+        scheduled = target_dates(state, target, "scheduled")
+        on_sale = set(target_dates(state, target, "on_sale"))
         print(f"\n  {target.label}")
-        if dates:
-            for d in sorted(dates):
-                print(f"    - {d}")
-        else:
+        if not scheduled and not on_sale:
             print("    (no dates seen yet)")
+            continue
+        for d in sorted(set(scheduled) | on_sale):
+            print(f"    - {d}{'  [ON SALE]' if d in on_sale else ''}")
     print(f"\nLast check: {state.get('last_check') or 'never'}")
 
 

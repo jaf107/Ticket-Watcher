@@ -147,7 +147,7 @@ class WatcherHub:
         state = load_state()
         targets = config.targets()
         self.dates_by_target: dict[str, list[str]] = {
-            t.key: target_dates(state, t) for t in targets
+            t.key: target_dates(state, t, "scheduled") for t in targets
         }
         self.current_dates = self.dates_by_target.get(targets[0].key, []) if targets else []
 
