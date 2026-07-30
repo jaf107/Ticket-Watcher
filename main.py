@@ -261,7 +261,16 @@ async def cmd_watch(args) -> None:
 
     print("CineplexBD Ticket Watcher")
     print("=" * 40)
-    await run_monitor(config, run_once=args.once)
+    summary = await run_monitor(config, run_once=args.once)
+
+    # A run that checked nothing must not report success, or a scheduled job
+    # goes on looking green for weeks while silently watching nothing.
+    if summary["successes"] == 0:
+        print(
+            f"\nFAILED: no target was checked successfully "
+            f"({summary['failures']} failure(s))."
+        )
+        sys.exit(1)
 
 
 async def cmd_test_notify(args) -> None:
@@ -276,7 +285,7 @@ async def cmd_test_notify(args) -> None:
     recipients = config.notifications.telegram.recipients()
 
     print(f"Sending test notifications to {len(recipients)} Telegram recipient(s)...")
-    await notifier.notify_all(
+    delivered = await notifier.notify_all(
         message=(
             "This is a test from CineplexBD Ticket Watcher!\n"
             "If you see this, notifications are working.\n\n"
@@ -284,6 +293,11 @@ async def cmd_test_notify(args) -> None:
         ),
         title="Test Notification",
     )
+
+    if not delivered:
+        print("\nFAILED: Telegram delivery did not succeed for every recipient.")
+        sys.exit(1)
+
     print("Done! Check your desktop and Telegram.")
 
 

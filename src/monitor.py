@@ -124,8 +124,13 @@ async def run_monitor(
     stop_event: asyncio.Event | None = None,
     api: CineplexAPI | None = None,
     run_once: bool = False,
-) -> None:
+) -> dict:
     """Main monitoring loop.
+
+    Returns a summary: {"checks": n, "successes": n, "failures": n}. Callers
+    use it to exit non-zero, so a run that checked nothing cannot report
+    success — a scheduled job that silently stops working is worse than a
+    loud one.
 
     Args:
         config: Watcher configuration.
@@ -136,10 +141,13 @@ async def run_monitor(
     """
     targets = config.targets()
 
+    summary = {"checks": 0, "successes": 0, "failures": 0}
+
     if not targets:
         print("ERROR: No movie/location pairs configured.")
         print("Run 'python main.py setup' first.")
-        return
+        summary["failures"] = 1
+        return summary
 
     owns_api = api is None
     api = api or CineplexAPI()
@@ -220,16 +228,31 @@ async def run_monitor(
         cycle_had_success = False
         last_error: Exception | None = None
 
-        for target in targets:
+        # Authenticate once up front. Without this a missing token makes every
+        # target launch its own browser and fail separately.
+        try:
+            await api.ensure_auth()
+        except Exception as e:
+            last_error = e
+            print(f"  Authentication failed: {e}")
+            await emit({"type": "error", "message": f"Auth failed: {e}", "timestamp": timestamp})
+            summary["failures"] += len(targets)
+            targets_to_check = []
+        else:
+            targets_to_check = targets
+
+        for target in targets_to_check:
             try:
                 current_dates = await api.get_movie_dates(target.location_id, target.movie_id)
                 cycle_had_success = True
+                summary["successes"] += 1
                 await _handle_dates(
                     target, current_dates, state, notifier, emit,
                     check_count, timestamp, now, fallback=False,
                 )
             except APIError as e:
                 last_error = e
+                summary["failures"] += 1
                 print(f"  {target.label}: API error: {e}")
                 await emit({
                     "type": "error",
@@ -239,6 +262,7 @@ async def run_monitor(
                 })
             except Exception as e:
                 last_error = e
+                summary["failures"] += 1
                 print(f"  {target.label}: unexpected error: {e}")
                 logger.exception(f"Unexpected error checking {target.label}")
                 await emit({
@@ -284,7 +308,13 @@ async def run_monitor(
         await api.close()
     save_state(state)
     await emit({"type": "stopped", "reason": "Shutdown"})
-    print(f"\nStopped after {check_count} checks. State saved.")
+
+    summary["checks"] = check_count
+    print(
+        f"\nStopped after {check_count} check cycle(s): "
+        f"{summary['successes']} succeeded, {summary['failures']} failed. State saved."
+    )
+    return summary
 
 
 async def _handle_dates(

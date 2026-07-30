@@ -25,7 +25,11 @@ logger = logging.getLogger("watcher.api")
 TICKET_API = "https://cineplex-ticket-api.cineplexbd.com/api/v1"
 WEB_API = "https://cineplex-web-api.cineplexbd.com/api/v1"
 AUTH_CACHE_PATH = Path(__file__).parent.parent / "data" / "auth_cache.json"
-AUTH_CACHE_TTL = 3600  # 1 hour
+# Guest logins are the fragile part of this client — they need a real browser
+# and clear a reCAPTCHA. Hold tokens longer and lean on the 401 handler in
+# _ticket_post to refresh, rather than paying for a browser launch every hour.
+AUTH_CACHE_TTL = 6 * 3600
+AUTH_ATTEMPTS = 3
 
 
 class APIError(Exception):
@@ -55,11 +59,31 @@ def _save_cached_auth(token: str, device_key: str) -> None:
     }))
 
 
-async def _get_ticket_auth_via_browser() -> tuple[str, str]:
+async def _get_ticket_auth_via_browser(attempts: int = AUTH_ATTEMPTS) -> tuple[str, str]:
     """Use Playwright to do guest login and capture token + device-key.
+
+    The login rides on a reCAPTCHA round trip whose timing varies, so a single
+    attempt fails intermittently — often enough to break a scheduled run while
+    the very next one succeeds. Retry before giving up.
 
     Returns (token, device_key) tuple.
     """
+    last_error: Exception | None = None
+
+    for attempt in range(1, attempts + 1):
+        try:
+            return await _attempt_ticket_auth()
+        except Exception as e:
+            last_error = e
+            logger.warning(f"Guest login attempt {attempt}/{attempts} failed: {e}")
+            if attempt < attempts:
+                await asyncio.sleep(3 * attempt)
+
+    raise APIError(f"Failed to get ticket API token via guest login: {last_error}")
+
+
+async def _attempt_ticket_auth() -> tuple[str, str]:
+    """One guest-login run in a fresh browser."""
     from playwright.async_api import async_playwright
 
     token = None
@@ -93,16 +117,20 @@ async def _get_ticket_auth_via_browser() -> tuple[str, str]:
         # the DOM only and then look for the guest-login button explicitly.
         await page.goto("https://ticket.cineplexbd.com/", wait_until="domcontentloaded", timeout=60000)
 
-        try:
-            guest_btn = await page.wait_for_selector("text=GUEST LOGIN", timeout=20000)
-        except Exception:
-            guest_btn = None
+        # The button's exact casing has changed before; try a few spellings
+        # rather than failing outright on a cosmetic tweak.
+        for selector in ("text=GUEST LOGIN", "text=Guest Login", "button:has-text('GUEST')"):
+            try:
+                guest_btn = await page.wait_for_selector(selector, timeout=15000)
+            except Exception:
+                continue
+            if guest_btn:
+                await guest_btn.click()
+                break
 
-        if guest_btn:
-            await guest_btn.click()
-
-        # The token may also arrive from an automatic guest-login on page load.
-        for _ in range(40):
+        # The token may also arrive from an automatic guest-login on page load,
+        # so poll regardless of whether a button was found or clicked.
+        for _ in range(60):
             if token:
                 break
             await page.wait_for_timeout(500)
@@ -110,7 +138,7 @@ async def _get_ticket_auth_via_browser() -> tuple[str, str]:
         await browser.close()
 
     if not token:
-        raise APIError("Failed to get ticket API token via guest login")
+        raise APIError("no token captured from guest-login response")
 
     # If we didn't capture device-key, generate one (SHA-256 hash)
     if not device_key:
@@ -153,9 +181,14 @@ class CineplexAPI:
         print("[Auth] Token acquired and cached!")
         return self.ticket_token
 
-    async def _ensure_auth(self) -> None:
+    async def ensure_auth(self) -> None:
+        """Authenticate if needed. Call once per cycle to avoid one browser
+        launch per target when the token is missing or expired."""
         if not self.ticket_token:
             await self.login()
+
+    async def _ensure_auth(self) -> None:
+        await self.ensure_auth()
 
     async def _ticket_post(self, endpoint: str, body: dict | None = None) -> dict | list:
         """Make an authenticated POST to the ticket API."""

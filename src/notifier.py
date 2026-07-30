@@ -236,17 +236,27 @@ class Notifier:
             telegram_chat_ids=config.notifications.telegram.recipients(),
         )
 
-    async def notify_all(self, message: str, title: str = "New Tickets Available!") -> None:
-        """Send notification to all enabled channels."""
+    async def notify_all(self, message: str, title: str = "New Tickets Available!") -> bool:
+        """Send notification to all enabled channels.
+
+        Returns whether Telegram delivery fully succeeded. Desktop failures are
+        not counted — a headless CI runner has no desktop and that is expected,
+        whereas a failed Telegram send means nobody was told.
+        """
         logger.info(f"ALERT: {title} - {message}")
 
         if self.desktop_enabled:
             send_desktop_notification(title, message)
             play_alert_sound()
 
+        delivered = True
         if self.telegram_enabled:
             telegram_msg = f"<b>{title}</b>\n\n{message}"
-            await send_telegram(self.telegram_token, self.telegram_chat_ids, telegram_msg)
+            delivered = await send_telegram(
+                self.telegram_token, self.telegram_chat_ids, telegram_msg
+            )
 
         if self.open_browser_on_alert:
             open_browser()
+
+        return delivered
