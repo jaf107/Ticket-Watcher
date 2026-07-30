@@ -107,7 +107,9 @@ async def _send_telegram_one(bot_token: str, chat_id: str, message: str) -> bool
     return False
 
 
-CINEPLEX_URL = "https://www.cineplexbd.com/"
+# The booking site, not the marketing homepage — an alert means seats are
+# buyable, so land where they can actually be bought.
+CINEPLEX_URL = "https://ticket.cineplexbd.com/home"
 
 
 def _applescript_string(text: str) -> str:
@@ -197,7 +199,7 @@ def play_alert_sound() -> None:
         logger.warning(f"Could not play sound: {e}")
 
 
-def open_browser(url: str = "https://www.cineplexbd.com/") -> None:
+def open_browser(url: str = CINEPLEX_URL) -> None:
     """Open the cinema site in the default browser."""
     try:
         webbrowser.open(url)
