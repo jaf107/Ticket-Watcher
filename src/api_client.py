@@ -89,16 +89,23 @@ async def _get_ticket_auth_via_browser() -> tuple[str, str]:
         page.on("request", capture_request)
         page.on("response", lambda r: asyncio.ensure_future(capture_response(r)))
 
-        await page.goto("https://ticket.cineplexbd.com/", wait_until="networkidle", timeout=30000)
-        await page.wait_for_timeout(2000)
+        # networkidle never settles on this page (polling/analytics), so wait for
+        # the DOM only and then look for the guest-login button explicitly.
+        await page.goto("https://ticket.cineplexbd.com/", wait_until="domcontentloaded", timeout=60000)
 
-        guest_btn = await page.query_selector("text=GUEST LOGIN")
+        try:
+            guest_btn = await page.wait_for_selector("text=GUEST LOGIN", timeout=20000)
+        except Exception:
+            guest_btn = None
+
         if guest_btn:
             await guest_btn.click()
-            for _ in range(20):
-                if token:
-                    break
-                await page.wait_for_timeout(500)
+
+        # The token may also arrive from an automatic guest-login on page load.
+        for _ in range(40):
+            if token:
+                break
+            await page.wait_for_timeout(500)
 
         await browser.close()
 
