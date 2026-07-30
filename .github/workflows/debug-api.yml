@@ -37,3 +37,38 @@ jobs:
 
           echo "=== plain GET of site (WAF check) ==="
           curl -sS -m 20 -o /dev/null -w "www status=%{http_code}\n" https://www.cineplexbd.com/ || true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+
+      - name: Can a real browser get past Cloudflare?
+        run: |
+          pip install --quiet playwright httpx
+          playwright install chromium --with-deps > /dev/null 2>&1
+          python - <<'PY'
+          import asyncio
+          from playwright.async_api import async_playwright
+
+          captured = []
+          async def main():
+              async with async_playwright() as p:
+                  b = await p.chromium.launch(headless=True)
+                  page = await b.new_page()
+
+                  async def on_resp(r):
+                      if "movie-show-time" in r.url:
+                          try: captured.append((r.status, (await r.text())[:200]))
+                          except Exception as e: captured.append((r.status, f"<unreadable {e}>"))
+                  page.on("response", lambda r: asyncio.ensure_future(on_resp(r)))
+
+                  await page.goto("https://www.cineplexbd.com/show-time",
+                                  wait_until="domcontentloaded", timeout=60000)
+                  await page.wait_for_timeout(15000)
+                  print("page title:", await page.title())
+                  await b.close()
+              print("movie-show-time responses captured:", len(captured))
+              for status, body in captured:
+                  print(f"  [{status}] {body[:200]}")
+          asyncio.run(main())
+          PY
