@@ -41,7 +41,7 @@ A Python tool to monitor CineplexBD for new movie ticket availability and get in
 
 ### Requirements
 - Python 3.10+
-- Windows (for desktop notifications)
+- Windows, macOS, or Linux (desktop notifications work on all three)
 - Telegram account (for Telegram notifications)
 
 ### Installation
@@ -53,12 +53,22 @@ A Python tool to monitor CineplexBD for new movie ticket availability and get in
    ```
 
 2. **Install dependencies**
+
+   Windows:
    ```sh
-   install.bat  # Only for developers
-   # Or manually:
-   pip install -r requirements.txt
-   playwright install
+   install.bat
    ```
+
+   macOS / Linux:
+   ```sh
+   python3 -m venv .venv
+   source .venv/bin/activate
+   pip install -r requirements.txt
+   playwright install chromium
+   ```
+
+   Playwright is used for the guest-login token and as a fallback scraper, so
+   the chromium download is required even though monitoring uses the JSON API.
 
 ---
 
@@ -122,7 +132,8 @@ A Python tool to monitor CineplexBD for new movie ticket availability and get in
 ## Troubleshooting
 - **Playwright errors:** Run `playwright install` again.
 - **Telegram not working:** Double-check your bot token, chat ID, and `.env` file.
-- **Desktop notifications:** Only supported on Windows.
+- **Desktop notifications:** Windows uses `winotify`, macOS uses Notification Center
+  (install `terminal-notifier` for clickable alerts), Linux uses `notify-send`.
 
 ---
 
