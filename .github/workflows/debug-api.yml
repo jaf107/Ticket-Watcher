@@ -1,0 +1,39 @@
+# Temporary diagnostic: shows what the CineplexBD APIs return from a GitHub
+# runner IP. Delete once the blocking behaviour is understood.
+name: Debug API
+
+on:
+  workflow_dispatch:
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Probe web API
+        run: |
+          echo "=== egress IP ==="
+          curl -sS -m 20 https://api.ipify.org || true; echo
+
+          echo "=== web login ==="
+          curl -sS -m 25 -o /tmp/login.txt -w "status=%{http_code} type=%{content_type}\n" \
+            -X POST "https://cineplex-web-api.cineplexbd.com/api/v1/login" \
+            -H "Content-Type: application/json" \
+            -H "Origin: https://www.cineplexbd.com" \
+            -H "Referer: https://www.cineplexbd.com/" \
+            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36" \
+            -d '{"user_id":"ciprobe1785400000000"}' || true
+          echo "--- first 400 bytes ---"; head -c 400 /tmp/login.txt; echo
+
+          echo "=== movie-show-time ==="
+          curl -sS -m 25 -o /tmp/mst.txt -w "status=%{http_code} type=%{content_type}\n" \
+            -X POST "https://cineplex-web-api.cineplexbd.com/api/v1/movie-show-time" \
+            -H "Content-Type: application/json" \
+            -H "Origin: https://www.cineplexbd.com" \
+            -H "Referer: https://www.cineplexbd.com/" \
+            -H "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0 Safari/537.36" \
+            -d '{"location":3,"date_from":"2026-07-30","date_to":"2026-08-20"}' || true
+          echo "--- first 400 bytes ---"; head -c 400 /tmp/mst.txt; echo
+
+          echo "=== plain GET of site (WAF check) ==="
+          curl -sS -m 20 -o /dev/null -w "www status=%{http_code}\n" https://www.cineplexbd.com/ || true
