@@ -20,6 +20,42 @@ except ImportError:
 logger = logging.getLogger("watcher.notify")
 
 TELEGRAM_API = "https://api.telegram.org/bot{token}/sendMessage"
+TELEGRAM_UPDATES = "https://api.telegram.org/bot{token}/getUpdates"
+
+
+async def get_telegram_contacts(bot_token: str) -> list[dict]:
+    """List the chats that have messaged the bot, for picking recipients.
+
+    Telegram only keeps roughly 24h of updates and returns nothing at all while
+    a webhook is registered, so an empty result means "nobody recently", not
+    "nobody ever". A person must message the bot before they can be added —
+    bots cannot open a conversation.
+    """
+    if not bot_token:
+        raise ValueError("No Telegram bot token configured")
+
+    async with httpx.AsyncClient(timeout=20.0) as client:
+        resp = await client.get(TELEGRAM_UPDATES.format(token=bot_token))
+    payload = resp.json()
+    if not payload.get("ok"):
+        raise RuntimeError(payload.get("description", "getUpdates failed"))
+
+    contacts: dict[str, dict] = {}
+    for update in payload.get("result", []):
+        for field in ("message", "edited_message", "channel_post", "my_chat_member"):
+            chat = (update.get(field) or {}).get("chat")
+            if not chat or chat.get("id") is None:
+                continue
+            name = " ".join(
+                filter(None, [chat.get("first_name"), chat.get("last_name")])
+            ) or chat.get("title") or ""
+            contacts[str(chat["id"])] = {
+                "chat_id": str(chat["id"]),
+                "type": chat.get("type", ""),
+                "name": name,
+                "username": chat.get("username", ""),
+            }
+    return list(contacts.values())
 
 
 async def send_telegram(

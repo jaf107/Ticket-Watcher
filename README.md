@@ -178,6 +178,18 @@ In CI, use `TELEGRAM_CHAT_IDS=111,222` (comma-separated) instead.
   python main.py dashboard --port 8080
   ```
 
+  The dashboard manages everything the config file does, in three tabs:
+
+  - **Watchlist** — add or remove movie/location pairs, with live date cards per pair
+  - **Recipients** — add or remove Telegram recipients. "Check who messaged the bot"
+    lists everyone who has messaged it, so you can add a person by clicking rather
+    than hunting for their chat ID
+  - **Settings** — desktop/Telegram toggles, check interval, and a test notification
+
+  Changes are written straight to `config.yaml` and the monitor restarts itself to
+  pick them up. It binds to localhost only, so it is not reachable from your phone,
+  and it does not affect the GitHub Actions cron — that reads repo variables.
+
 ---
 
 ## Troubleshooting

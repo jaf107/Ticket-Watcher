@@ -11,7 +11,8 @@ from aiohttp import web
 
 from .api_client import CineplexAPI
 from .config_loader import (
-    Config, LocationRef, MovieConfig, WatchConfig, load_config, save_config,
+    CinemaConfig, Config, LocationRef, MovieConfig, WatchConfig,
+    load_config, save_config,
 )
 from .monitor import run_monitor, load_state, save_state, empty_state, target_dates
 
@@ -34,11 +35,13 @@ class WatcherHub:
         self.stats = {"checks": 0, "alerts": 0, "errors": 0, "started_at": None}
         self.current_dates: list[str] = []
 
-        # Load initial state from disk. The dashboard shows one target at a
-        # time, so it displays the first configured pair.
+        # Dates per target key, seeded from whatever the last run persisted.
         state = load_state()
         targets = config.targets()
-        self.current_dates = target_dates(state, targets[0]) if targets else []
+        self.dates_by_target: dict[str, list[str]] = {
+            t.key: target_dates(state, t) for t in targets
+        }
+        self.current_dates = self.dates_by_target.get(targets[0].key, []) if targets else []
 
     async def on_event(self, event: dict) -> None:
         """Callback from the monitor loop — broadcast to all SSE clients."""
@@ -46,6 +49,9 @@ class WatcherHub:
 
         if etype == "check" or etype == "alert":
             self.stats["checks"] = event.get("count", self.stats["checks"])
+            key = event.get("target")
+            if key:
+                self.dates_by_target[key] = event.get("dates", [])
             self.current_dates = event.get("dates", self.current_dates)
             if etype == "alert":
                 self.stats["alerts"] += 1
@@ -144,6 +150,133 @@ class WatcherHub:
         if was_running:
             await self.start()
 
+    async def _apply(self, changed: dict) -> None:
+        """Persist config and restart the monitor so changes take effect."""
+        was_running = self.running
+        if was_running:
+            await self.stop()
+
+        save_config(self.config)
+        await self.broadcast(changed)
+
+        if was_running:
+            await self.start()
+
+    async def add_target(self, movie_id: int, movie_name: str,
+                         location_id: int, location_name: str) -> bool:
+        """Add one movie/location pair. False if it was already being watched."""
+        key = f"{movie_id}@{location_id}"
+        if any(t.key == key for t in self.config.targets()):
+            return False
+
+        for watch in self.config.watches:
+            if watch.movie.id is not None and int(watch.movie.id) == movie_id:
+                watch.locations.append(LocationRef(id=location_id, name=location_name))
+                break
+        else:
+            self.config.watches.append(
+                WatchConfig(
+                    movie=MovieConfig(id=movie_id, name=movie_name),
+                    locations=[LocationRef(id=location_id, name=location_name)],
+                )
+            )
+
+        # A brand new target has no baseline, so its first check scans silently
+        # instead of reporting every existing date as new.
+        self.dates_by_target.setdefault(key, [])
+        await self._apply({
+            "type": "targets_changed",
+            "message": f"Now watching {movie_name} at {location_name}",
+        })
+        return True
+
+    async def remove_target(self, key: str) -> bool:
+        """Stop watching one pair and drop its stored dates."""
+        if not any(t.key == key for t in self.config.targets()):
+            return False
+
+        movie_id, _, location_id = key.partition("@")
+        for watch in self.config.watches:
+            if watch.movie.id is None or str(watch.movie.id) != movie_id:
+                continue
+            watch.locations = [l for l in watch.locations if str(l.id) != location_id]
+        self.config.watches = [w for w in self.config.watches if w.locations]
+
+        # Legacy single-pair configs have no `watches` to prune; clearing the
+        # old fields is what actually removes the target for them.
+        if not self.config.watches and self.config.legacy_target_key() == key:
+            self.config.movie = MovieConfig()
+            self.config.cinema = CinemaConfig()
+
+        self.dates_by_target.pop(key, None)
+        state = load_state()
+        state.get("targets", {}).pop(key, None)
+        save_state(state)
+
+        await self._apply({"type": "targets_changed", "message": f"Stopped watching {key}"})
+        return True
+
+    async def add_recipient(self, chat_id: str) -> bool:
+        """Add a Telegram recipient. False if already present."""
+        chat_id = str(chat_id).strip()
+        telegram = self.config.notifications.telegram
+        if not chat_id or chat_id in telegram.recipients():
+            return False
+
+        if not telegram.chat_id:
+            telegram.chat_id = chat_id
+        else:
+            telegram.chat_ids.append(chat_id)
+
+        await self._apply({"type": "recipients_changed", "message": f"Added recipient {chat_id}"})
+        return True
+
+    async def remove_recipient(self, chat_id: str) -> bool:
+        chat_id = str(chat_id).strip()
+        telegram = self.config.notifications.telegram
+        if chat_id not in telegram.recipients():
+            return False
+
+        if telegram.chat_id == chat_id:
+            # Promote the next recipient so `chat_id` never sits empty while
+            # others remain — env overrides and CI both key off it.
+            telegram.chat_id = telegram.chat_ids.pop(0) if telegram.chat_ids else ""
+        else:
+            telegram.chat_ids = [c for c in telegram.chat_ids if c != chat_id]
+
+        await self._apply({"type": "recipients_changed", "message": f"Removed recipient {chat_id}"})
+        return True
+
+    async def update_settings(self, interval: int | None = None,
+                              desktop: bool | None = None,
+                              telegram: bool | None = None) -> None:
+        if interval is not None:
+            self.config.monitoring.interval_seconds = max(int(interval), 30)
+        if desktop is not None:
+            self.config.notifications.desktop.enabled = bool(desktop)
+        if telegram is not None:
+            self.config.notifications.telegram.enabled = bool(telegram)
+
+        await self._apply({"type": "settings_changed", "message": "Settings updated"})
+
+    async def send_test_notification(self) -> int:
+        """Fire a test alert. Returns the number of Telegram recipients tried."""
+        from .notifier import Notifier
+
+        targets = self.config.targets()
+        watching = "\n".join(f"- {t.label}" for t in targets) or "- nothing configured yet"
+        recipients = self.config.notifications.telegram.recipients()
+
+        await Notifier.from_config(self.config).notify_all(
+            message=(
+                "This is a test from CineplexBD Ticket Watcher!\n"
+                "If you see this, notifications are working.\n\n"
+                f"Watching {len(targets)} pair(s):\n{watching}"
+            ),
+            title="Test Notification",
+        )
+        return len(recipients)
+
     def subscribe(self) -> asyncio.Queue:
         q: asyncio.Queue = asyncio.Queue(maxsize=50)
         self.subscribers.append(q)
@@ -172,9 +305,18 @@ class WatcherHub:
                     "movie_id": t.movie_id,
                     "location": t.location_name,
                     "location_id": t.location_id,
+                    "dates": self.dates_by_target.get(t.key, []),
                 }
                 for t in targets
             ],
+            "settings": {
+                "interval_seconds": self.config.monitoring.interval_seconds,
+                "desktop_enabled": self.config.notifications.desktop.enabled,
+                "telegram_enabled": self.config.notifications.telegram.enabled,
+                # The token itself never leaves the server.
+                "has_bot_token": bool(self.config.notifications.telegram.bot_token),
+            },
+            "recipients": self.config.notifications.telegram.recipients(),
             "movie": first.movie_name if first else "",
             "movie_id": first.movie_id if first else None,
             "location": first.location_name if first else "",
@@ -262,6 +404,120 @@ async def handle_config(request: web.Request) -> web.Response:
         return web.json_response({"ok": False, "message": str(e)}, status=500)
 
 
+async def handle_add_target(request: web.Request) -> web.Response:
+    hub: WatcherHub = request.app["hub"]
+    try:
+        body = await request.json()
+        added = await hub.add_target(
+            movie_id=int(body["movie_id"]),
+            movie_name=body.get("movie_name", ""),
+            location_id=int(body["location_id"]),
+            location_name=body.get("location_name", ""),
+        )
+    except (KeyError, ValueError, TypeError) as e:
+        return web.json_response({"ok": False, "message": f"Invalid data: {e}"}, status=400)
+    except Exception as e:
+        return web.json_response({"ok": False, "message": str(e)}, status=500)
+
+    if not added:
+        return web.json_response({"ok": False, "message": "Already watching that pair"})
+    return web.json_response({"ok": True, "message": "Target added", **hub.get_status()})
+
+
+async def handle_remove_target(request: web.Request) -> web.Response:
+    hub: WatcherHub = request.app["hub"]
+    try:
+        body = await request.json()
+        removed = await hub.remove_target(str(body["key"]))
+    except KeyError as e:
+        return web.json_response({"ok": False, "message": f"Invalid data: {e}"}, status=400)
+    except Exception as e:
+        return web.json_response({"ok": False, "message": str(e)}, status=500)
+
+    if not removed:
+        return web.json_response({"ok": False, "message": "No such target"}, status=404)
+    return web.json_response({"ok": True, "message": "Target removed", **hub.get_status()})
+
+
+async def handle_contacts(request: web.Request) -> web.Response:
+    """Chats that have messaged the bot, so recipients can be picked not typed."""
+    hub: WatcherHub = request.app["hub"]
+    from .notifier import get_telegram_contacts
+
+    try:
+        contacts = await get_telegram_contacts(
+            hub.config.notifications.telegram.bot_token
+        )
+    except ValueError as e:
+        return web.json_response({"ok": False, "message": str(e)}, status=400)
+    except Exception as e:
+        return web.json_response({"ok": False, "message": str(e)}, status=502)
+
+    existing = set(hub.config.notifications.telegram.recipients())
+    for contact in contacts:
+        contact["already_added"] = contact["chat_id"] in existing
+    return web.json_response({"ok": True, "contacts": contacts})
+
+
+async def handle_add_recipient(request: web.Request) -> web.Response:
+    hub: WatcherHub = request.app["hub"]
+    try:
+        body = await request.json()
+        added = await hub.add_recipient(str(body["chat_id"]))
+    except KeyError as e:
+        return web.json_response({"ok": False, "message": f"Invalid data: {e}"}, status=400)
+    except Exception as e:
+        return web.json_response({"ok": False, "message": str(e)}, status=500)
+
+    if not added:
+        return web.json_response({"ok": False, "message": "Already a recipient"})
+    return web.json_response({"ok": True, "message": "Recipient added", **hub.get_status()})
+
+
+async def handle_remove_recipient(request: web.Request) -> web.Response:
+    hub: WatcherHub = request.app["hub"]
+    try:
+        body = await request.json()
+        removed = await hub.remove_recipient(str(body["chat_id"]))
+    except KeyError as e:
+        return web.json_response({"ok": False, "message": f"Invalid data: {e}"}, status=400)
+    except Exception as e:
+        return web.json_response({"ok": False, "message": str(e)}, status=500)
+
+    if not removed:
+        return web.json_response({"ok": False, "message": "Not a recipient"}, status=404)
+    return web.json_response({"ok": True, "message": "Recipient removed", **hub.get_status()})
+
+
+async def handle_settings(request: web.Request) -> web.Response:
+    hub: WatcherHub = request.app["hub"]
+    try:
+        body = await request.json()
+        await hub.update_settings(
+            interval=body.get("interval_seconds"),
+            desktop=body.get("desktop_enabled"),
+            telegram=body.get("telegram_enabled"),
+        )
+    except (ValueError, TypeError) as e:
+        return web.json_response({"ok": False, "message": f"Invalid data: {e}"}, status=400)
+    except Exception as e:
+        return web.json_response({"ok": False, "message": str(e)}, status=500)
+
+    return web.json_response({"ok": True, "message": "Settings saved", **hub.get_status()})
+
+
+async def handle_test_notify(request: web.Request) -> web.Response:
+    hub: WatcherHub = request.app["hub"]
+    try:
+        count = await hub.send_test_notification()
+    except Exception as e:
+        return web.json_response({"ok": False, "message": str(e)}, status=500)
+    return web.json_response({
+        "ok": True,
+        "message": f"Test sent to {count} Telegram recipient(s) — check the log for failures",
+    })
+
+
 async def handle_events(request: web.Request) -> web.StreamResponse:
     hub: WatcherHub = request.app["hub"]
 
@@ -305,5 +561,12 @@ def create_app(hub: WatcherHub) -> web.Application:
     app.router.add_get("/api/locations", handle_locations)
     app.router.add_get("/api/movies", handle_movies)
     app.router.add_post("/api/config", handle_config)
+    app.router.add_post("/api/targets/add", handle_add_target)
+    app.router.add_post("/api/targets/remove", handle_remove_target)
+    app.router.add_get("/api/telegram/contacts", handle_contacts)
+    app.router.add_post("/api/recipients/add", handle_add_recipient)
+    app.router.add_post("/api/recipients/remove", handle_remove_recipient)
+    app.router.add_post("/api/settings", handle_settings)
+    app.router.add_post("/api/test-notify", handle_test_notify)
 
     return app

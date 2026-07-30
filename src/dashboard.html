@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>CineplexBD Ticket Watcher</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Ctext y='26' font-size='26'%3E%F0%9F%8E%AC%3C/text%3E%3C/svg%3E">
 <style>
   * { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -46,7 +47,7 @@
     display: flex;
     align-items: center;
     gap: 1rem;
-    margin-bottom: 2rem;
+    margin-bottom: 1.5rem;
     padding-bottom: 1.5rem;
     border-bottom: 1px solid var(--border);
   }
@@ -78,128 +79,126 @@
   }
   @keyframes pulse-badge { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
 
-  /* Config section */
-  .config-section {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    margin-bottom: 1.5rem;
-    overflow: hidden;
+  /* Tabs */
+  .tabs {
+    display: flex; gap: 4px; margin-bottom: 1rem;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 4px;
   }
-  .config-toggle {
-    width: 100%;
-    padding: 0.85rem 1.25rem;
-    background: none;
-    border: none;
-    color: var(--text);
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    text-align: left;
+  .tab {
+    flex: 1; padding: 8px 12px; border: none; border-radius: 8px;
+    background: none; color: var(--text-muted); cursor: pointer;
+    font-size: 0.82rem; font-weight: 600; font-family: inherit;
+    transition: all 0.15s;
   }
-  .config-toggle:hover { background: var(--bg-card-hover); }
-  .config-toggle .arrow {
-    margin-left: auto;
-    transition: transform 0.2s;
-    color: var(--text-muted);
-  }
-  .config-toggle.open .arrow { transform: rotate(180deg); }
-  .config-body {
+  .tab:hover { color: var(--text); }
+  .tab.active { background: var(--purple); color: #fff; }
+
+  .panel {
     display: none;
-    padding: 0 1.25rem 1.25rem;
+    background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.5rem;
   }
-  .config-body.open { display: block; }
-  .config-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.75rem;
-    margin-bottom: 0.75rem;
+  .panel.active { display: block; }
+  .panel-hint {
+    font-size: 0.8rem; color: var(--text-muted); margin-bottom: 1rem; line-height: 1.5;
   }
-  .config-field label {
-    display: block;
-    font-size: 0.7rem;
-    color: var(--text-muted);
-    text-transform: uppercase;
-    letter-spacing: 0.08em;
-    margin-bottom: 6px;
+
+  /* Rows (targets, recipients, contacts) */
+  .row-list { display: flex; flex-direction: column; gap: 0.5rem; margin-bottom: 1rem; }
+  .row {
+    display: flex; align-items: center; gap: 0.75rem;
+    background: var(--bg); border: 1px solid var(--border);
+    border-radius: 10px; padding: 0.7rem 0.9rem;
   }
-  .config-field select {
-    width: 100%;
-    padding: 9px 12px;
-    background: var(--bg);
-    color: var(--text);
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    font-size: 0.85rem;
-    cursor: pointer;
-    appearance: none;
+  .row-main { flex: 1; min-width: 0; }
+  .row-title {
+    font-size: 0.88rem; font-weight: 600;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .row-sub { font-size: 0.75rem; color: var(--text-muted); margin-top: 1px; }
+  .row-empty {
+    color: var(--text-muted); font-size: 0.85rem; padding: 1.25rem; text-align: center;
+    background: var(--bg); border: 1px dashed var(--border); border-radius: 10px;
+  }
+  .pill {
+    font-size: 0.68rem; font-weight: 700; letter-spacing: 0.05em;
+    text-transform: uppercase; padding: 3px 9px; border-radius: 20px;
+    background: var(--bg-card); color: var(--text-muted); border: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .pill.ok { background: var(--green-dim); color: var(--green); border-color: rgba(34,197,94,0.3); }
+
+  /* Forms */
+  .field-grid {
+    display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem;
+  }
+  .field label {
+    display: block; font-size: 0.7rem; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 6px;
+  }
+  .field select, .field input[type="text"], .field input[type="number"] {
+    width: 100%; padding: 9px 12px;
+    background: var(--bg); color: var(--text);
+    border: 1px solid var(--border); border-radius: 8px;
+    font-size: 0.85rem; font-family: inherit;
+  }
+  .field select { cursor: pointer; appearance: none;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='%2394a3b8' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");
-    background-repeat: no-repeat;
-    background-position: right 12px center;
+    background-repeat: no-repeat; background-position: right 12px center;
   }
-  .config-field select:focus { border-color: var(--purple); outline: none; }
-  .config-field select:disabled { opacity: 0.5; cursor: not-allowed; }
-  .config-actions {
-    display: flex;
-    align-items: center;
-    gap: 0.75rem;
-  }
-  .config-status {
-    font-size: 0.8rem;
-    color: var(--text-muted);
-  }
-  .config-status.loading { color: var(--amber); }
-  .config-status.success { color: var(--green); }
-  .config-status.error { color: var(--red); }
+  .field select:focus, .field input:focus { border-color: var(--purple); outline: none; }
+  .field select:disabled, .field input:disabled { opacity: 0.5; cursor: not-allowed; }
+
+  .actions { display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
+  .form-status { font-size: 0.8rem; color: var(--text-muted); }
+  .form-status.loading { color: var(--amber); }
+  .form-status.success { color: var(--green); }
+  .form-status.error { color: var(--red); }
+
   .btn-sm {
-    padding: 8px 20px;
-    border-radius: 8px;
-    border: none;
-    font-size: 0.8rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: all 0.2s;
+    padding: 8px 18px; border-radius: 8px; border: none;
+    font-size: 0.8rem; font-weight: 600; cursor: pointer;
+    font-family: inherit; transition: all 0.2s;
   }
   .btn-sm:disabled { opacity: 0.4; cursor: not-allowed; }
-  .btn-load {
-    background: var(--bg);
-    color: var(--text-dim);
-    border: 1px solid var(--border);
-  }
+  .btn-load { background: var(--bg); color: var(--text-dim); border: 1px solid var(--border); }
   .btn-load:hover:not(:disabled) { border-color: var(--purple); color: var(--text); }
-  .btn-save {
-    background: var(--purple);
-    color: white;
-  }
+  .btn-save { background: var(--purple); color: white; }
   .btn-save:hover:not(:disabled) { background: var(--purple-dim); }
+  .btn-danger {
+    background: var(--red-dim); color: var(--red);
+    border: 1px solid rgba(239, 68, 68, 0.3); padding: 6px 12px;
+  }
+  .btn-danger:hover:not(:disabled) { background: rgba(239, 68, 68, 0.25); }
 
-  /* Info bar */
-  .info-bar {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 0.75rem;
-    margin-bottom: 1.5rem;
+  /* Toggle */
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0.7rem 0; border-bottom: 1px solid rgba(42,42,80,0.5);
   }
-  .info-item {
-    background: var(--bg-card);
-    border: 1px solid var(--border);
-    border-radius: var(--radius);
-    padding: 1rem 1.25rem;
+  .toggle-row:last-of-type { border-bottom: none; }
+  .toggle-label { font-size: 0.88rem; }
+  .toggle-label small { display: block; color: var(--text-muted); font-size: 0.75rem; }
+  .switch { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+  .switch input { opacity: 0; width: 0; height: 0; }
+  .slider {
+    position: absolute; inset: 0; cursor: pointer;
+    background: var(--border); border-radius: 24px; transition: 0.2s;
   }
-  .info-item .label {
-    font-size: 0.7rem; color: var(--text-muted);
-    text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 4px;
+  .slider::before {
+    content: ''; position: absolute; height: 18px; width: 18px;
+    left: 3px; bottom: 3px; background: var(--text-dim);
+    border-radius: 50%; transition: 0.2s;
   }
-  .info-item .value { font-size: 0.95rem; font-weight: 600; }
+  .switch input:checked + .slider { background: var(--purple); }
+  .switch input:checked + .slider::before { transform: translateX(20px); background: #fff; }
 
   /* Controls */
-  .controls { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; }
+  .controls { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
   .btn {
     padding: 10px 28px; border-radius: 10px; border: none;
-    font-size: 0.9rem; font-weight: 600; cursor: pointer;
+    font-size: 0.9rem; font-weight: 600; cursor: pointer; font-family: inherit;
     transition: all 0.2s; display: flex; align-items: center; gap: 8px;
   }
   .btn:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -207,6 +206,8 @@
   .btn-start:hover:not(:disabled) { background: var(--purple-dim); box-shadow: 0 0 20px var(--purple-glow); }
   .btn-stop { background: var(--red-dim); color: var(--red); border: 1px solid rgba(239, 68, 68, 0.3); }
   .btn-stop:hover:not(:disabled) { background: rgba(239, 68, 68, 0.25); }
+  .btn-ghost { background: var(--bg-card); color: var(--text-dim); border: 1px solid var(--border); }
+  .btn-ghost:hover:not(:disabled) { border-color: var(--purple); color: var(--text); }
 
   /* Stats grid */
   .stats-grid {
@@ -231,8 +232,14 @@
   }
   .section-heading::after { content: ''; flex: 1; height: 1px; background: var(--border); }
 
-  /* Date cards */
+  /* Dates */
   .dates-section { margin-bottom: 1.5rem; }
+  .target-block { margin-bottom: 1.25rem; }
+  .target-block-title {
+    font-size: 0.85rem; font-weight: 600; margin-bottom: 0.5rem;
+    display: flex; align-items: baseline; gap: 8px;
+  }
+  .target-block-title .where { color: var(--text-muted); font-weight: 400; font-size: 0.78rem; }
   .dates-grid {
     display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 0.6rem;
   }
@@ -254,7 +261,7 @@
     50% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.3); }
   }
   .no-dates {
-    color: var(--text-muted); font-size: 0.9rem; padding: 2rem; text-align: center;
+    color: var(--text-muted); font-size: 0.85rem; padding: 1rem; text-align: center;
     background: var(--bg-card); border: 1px dashed var(--border); border-radius: var(--radius);
   }
 
@@ -295,10 +302,10 @@
     .container { padding: 1rem; }
     .header { flex-wrap: wrap; }
     .status-badge { margin-left: 0; }
-    .info-bar { grid-template-columns: 1fr; }
-    .config-row { grid-template-columns: 1fr; }
+    .field-grid { grid-template-columns: 1fr; }
     .stats-grid { grid-template-columns: repeat(2, 1fr); }
     .dates-grid { grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); }
+    .tab { font-size: 0.75rem; padding: 8px 6px; }
   }
 </style>
 </head>
@@ -307,7 +314,7 @@
 <div class="container">
   <!-- Header -->
   <div class="header">
-    <div class="header-icon">🎬</div>
+    <div class="header-icon">&#127916;</div>
     <div class="header-text">
       <h1>CineplexBD Ticket Watcher</h1>
       <p id="subtitle">Loading...</p>
@@ -315,44 +322,102 @@
     <div class="status-badge idle" id="statusBadge">IDLE</div>
   </div>
 
-  <!-- Configuration -->
-  <div class="config-section">
-    <button class="config-toggle" id="configToggle" onclick="toggleConfig()">
-      ⚙ Configure Movie &amp; Location
-      <span class="arrow">▼</span>
-    </button>
-    <div class="config-body" id="configBody">
-      <div class="config-row">
-        <div class="config-field">
-          <label>Location</label>
-          <select id="locationSelect" disabled onchange="onLocationChange()">
-            <option value="">-- Click "Load" first --</option>
-          </select>
-        </div>
-        <div class="config-field">
-          <label>Movie</label>
-          <select id="movieSelect" disabled>
-            <option value="">-- Select location first --</option>
-          </select>
-        </div>
+  <!-- Tabs -->
+  <div class="tabs">
+    <button class="tab active" data-panel="panelWatchlist" onclick="showPanel(this)">Watchlist</button>
+    <button class="tab" data-panel="panelRecipients" onclick="showPanel(this)">Recipients</button>
+    <button class="tab" data-panel="panelSettings" onclick="showPanel(this)">Settings</button>
+  </div>
+
+  <!-- Watchlist panel -->
+  <div class="panel active" id="panelWatchlist">
+    <div class="panel-hint">
+      Every movie/location pair is checked independently. Alerts name exactly where new dates appeared.
+    </div>
+    <div class="row-list" id="targetList"></div>
+
+    <div class="section-heading">Add a pair</div>
+    <div class="field-grid">
+      <div class="field">
+        <label>Location</label>
+        <select id="locationSelect" disabled onchange="onLocationChange()">
+          <option value="">-- Load locations first --</option>
+        </select>
       </div>
-      <div class="config-actions">
-        <button class="btn-sm btn-load" id="btnLoadLocs" onclick="loadLocations()">Load Locations</button>
-        <button class="btn-sm btn-save" id="btnSave" onclick="saveConfig()" disabled>Save &amp; Apply</button>
-        <span class="config-status" id="configStatus"></span>
+      <div class="field">
+        <label>Movie</label>
+        <select id="movieSelect" disabled onchange="onMovieChange()">
+          <option value="">-- Select location first --</option>
+        </select>
       </div>
+    </div>
+    <div class="actions">
+      <button class="btn-sm btn-load" id="btnLoadLocs" onclick="loadLocations()">Load Locations</button>
+      <button class="btn-sm btn-save" id="btnAddTarget" onclick="addTarget()" disabled>Add to Watchlist</button>
+      <span class="form-status" id="targetStatus"></span>
     </div>
   </div>
 
-  <!-- Info bar -->
-  <div class="info-bar">
-    <div class="info-item">
-      <div class="label">Movie</div>
-      <div class="value" id="movieName">--</div>
+  <!-- Recipients panel -->
+  <div class="panel" id="panelRecipients">
+    <div class="panel-hint">
+      Everyone here gets every alert. A person must message the bot first &mdash;
+      Telegram blocks bots from opening a conversation. Use "Check who messaged the bot"
+      after they tap Start.
     </div>
-    <div class="info-item">
-      <div class="label">Location</div>
-      <div class="value" id="locationName">--</div>
+    <div class="row-list" id="recipientList"></div>
+
+    <div class="section-heading">Who has messaged the bot</div>
+    <div class="actions" style="margin-bottom: 0.75rem;">
+      <button class="btn-sm btn-load" id="btnContacts" onclick="loadContacts()">Check who messaged the bot</button>
+      <span class="form-status" id="contactStatus"></span>
+    </div>
+    <div class="row-list" id="contactList"></div>
+
+    <div class="section-heading">Or add a chat ID directly</div>
+    <div class="actions">
+      <div class="field" style="flex: 1; min-width: 180px;">
+        <input type="text" id="manualChatId" placeholder="e.g. 111222333 or -1001234567890">
+      </div>
+      <button class="btn-sm btn-save" onclick="addRecipientManual()">Add</button>
+      <span class="form-status" id="recipientStatus"></span>
+    </div>
+  </div>
+
+  <!-- Settings panel -->
+  <div class="panel" id="panelSettings">
+    <div class="toggle-row">
+      <div class="toggle-label">
+        Desktop notifications
+        <small>Native toast on this machine</small>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="setDesktop" onchange="saveSettings()">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="toggle-row">
+      <div class="toggle-label">
+        Telegram notifications
+        <small id="tokenHint">Sent to everyone on the Recipients tab</small>
+      </div>
+      <label class="switch">
+        <input type="checkbox" id="setTelegram" onchange="saveSettings()">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="toggle-row">
+      <div class="toggle-label">
+        Check interval
+        <small>Seconds between checks (minimum 30)</small>
+      </div>
+      <div class="field" style="width: 110px;">
+        <input type="number" id="setInterval" min="30" step="10" onchange="saveSettings()">
+      </div>
+    </div>
+    <div class="actions" style="margin-top: 1rem;">
+      <button class="btn-sm btn-load" onclick="testNotify()">Send test notification</button>
+      <span class="form-status" id="settingsStatus"></span>
     </div>
   </div>
 
@@ -373,8 +438,8 @@
       <div class="stat-label">Checks</div>
     </div>
     <div class="stat-card">
-      <div class="stat-value" id="statDates">0</div>
-      <div class="stat-label">Dates</div>
+      <div class="stat-value" id="statPairs">0</div>
+      <div class="stat-label">Pairs</div>
     </div>
     <div class="stat-card">
       <div class="stat-value" id="statAlerts">0</div>
@@ -389,8 +454,8 @@
   <!-- Available Dates -->
   <div class="dates-section">
     <div class="section-heading">Available Dates</div>
-    <div class="dates-grid" id="datesGrid">
-      <div class="no-dates">No dates yet. Start monitoring to check availability.</div>
+    <div id="datesByTarget">
+      <div class="no-dates">No dates yet. Start watching to check availability.</div>
     </div>
   </div>
 
@@ -411,39 +476,72 @@
 
   let state = {
     running: false,
-    movie: '', movieId: null,
-    location: '', locationId: null,
-    dates: [],
-    newDates: new Set(),
+    targets: [],
+    recipients: [],
+    settings: { interval_seconds: 60, desktop_enabled: false, telegram_enabled: true, has_bot_token: false },
+    newDates: new Set(),   // "targetKey|date"
     stats: { checks: 0, alerts: 0, errors: 0, started_at: null },
   };
 
   let uptimeInterval = null;
-  let locationsCache = [];
-  let moviesCache = [];
 
-  // --- SSE Connection ---
+  function esc(s) {
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]
+    ));
+  }
+
+  function setStatus(id, text, cls) {
+    const el = document.getElementById(id);
+    el.innerHTML = text;
+    el.className = 'form-status ' + (cls || '');
+  }
+
+  async function postJSON(url, body) {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body || {}),
+    });
+    const data = await res.json();
+    if (!data.ok) throw new Error(data.message || 'Request failed');
+    return data;
+  }
+
+  function applyStatus(data) {
+    if (data.targets) state.targets = data.targets;
+    if (data.recipients) state.recipients = data.recipients;
+    if (data.settings) state.settings = data.settings;
+    if (typeof data.running === 'boolean') state.running = data.running;
+    if (data.stats) state.stats = data.stats;
+    updateUI();
+  }
+
+  async function refreshStatus() {
+    try {
+      applyStatus(await (await fetch('/api/status')).json());
+    } catch (e) { /* SSE will catch up */ }
+  }
+
+  // --- Tabs ---
+  window.showPanel = function(btn) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(btn.dataset.panel).classList.add('active');
+  };
+
+  // --- SSE ---
   function connect() {
     const es = new EventSource('/api/events');
-    es.onmessage = function(e) {
-      handleEvent(JSON.parse(e.data));
-    };
-    es.onerror = function() {
-      updateStatus(false);
-    };
+    es.onmessage = e => handleEvent(JSON.parse(e.data));
+    es.onerror = () => updateStatus(false);
   }
 
   function handleEvent(event) {
     switch (event.type) {
       case 'init':
-        state.movie = event.movie || '';
-        state.movieId = event.movie_id || null;
-        state.location = event.location || '';
-        state.locationId = event.location_id || null;
-        state.dates = event.dates || [];
-        state.stats = event.stats || state.stats;
-        state.running = event.running;
-        updateUI();
+        applyStatus(event);
         if (event.log && event.log.length > 0) {
           document.getElementById('logContainer').innerHTML = '';
           event.log.forEach(e => addLogEntry(e));
@@ -452,43 +550,38 @@
 
       case 'status':
         state.running = event.running;
-        state.movie = event.movie || state.movie;
-        state.location = event.location || state.location;
+        if (event.targets) state.targets = event.targets;
         updateUI();
         addLogEntry(event);
         break;
 
       case 'check':
+      case 'alert': {
         state.stats.checks = event.count;
-        state.dates = event.dates || state.dates;
-        if (event.new_dates && event.new_dates.length > 0) {
-          event.new_dates.forEach(d => state.newDates.add(d));
-          setTimeout(() => { event.new_dates.forEach(d => state.newDates.delete(d)); renderDates(); }, 15000);
+        const t = state.targets.find(t => t.key === event.target);
+        if (t) t.dates = event.dates || t.dates;
+        if (event.type === 'alert') state.stats.alerts++;
+        const fresh = event.new_dates || [];
+        if (fresh.length > 0) {
+          fresh.forEach(d => state.newDates.add(event.target + '|' + d));
+          setTimeout(() => {
+            fresh.forEach(d => state.newDates.delete(event.target + '|' + d));
+            renderDates();
+          }, 30000);
         }
         updateUI();
         addLogEntry(event);
-        break;
-
-      case 'alert':
-        state.stats.checks = event.count;
-        state.stats.alerts++;
-        state.dates = event.dates || state.dates;
-        if (event.new_dates) {
-          event.new_dates.forEach(d => state.newDates.add(d));
-          setTimeout(() => { event.new_dates.forEach(d => state.newDates.delete(d)); renderDates(); }, 30000);
-        }
-        updateUI();
-        addLogEntry(event);
-        if (Notification.permission === 'granted') {
+        if (event.type === 'alert' && Notification.permission === 'granted') {
           new Notification('New Tickets Available!', {
-            body: event.new_dates ? 'New dates: ' + event.new_dates.join(', ') : event.message
+            body: (event.movie || '') + ' at ' + (event.location || '') +
+                  ': ' + fresh.join(', ')
           });
         }
         break;
+      }
 
       case 'error':
         state.stats.errors++;
-        updateStats();
         addLogEntry(event);
         break;
 
@@ -498,74 +591,129 @@
         addLogEntry(event);
         break;
 
+      case 'targets_changed':
+      case 'recipients_changed':
+      case 'settings_changed':
       case 'config_changed':
-        state.movie = event.movie || '';
-        state.movieId = event.movie_id || null;
-        state.location = event.location || '';
-        state.locationId = event.location_id || null;
-        state.dates = [];
-        updateUI();
-        addLogEntry({ type: 'status', timestamp: new Date().toLocaleTimeString(),
-          message: `Config changed: ${event.movie} at ${event.location}` });
+        addLogEntry({ type: 'status', message: event.message || 'Config changed',
+                      timestamp: new Date().toLocaleTimeString() });
+        refreshStatus();
         break;
     }
   }
 
-  // --- UI Updates ---
+  // --- Rendering ---
   function updateUI() {
     updateStatus(state.running);
-    document.getElementById('movieName').textContent = state.movie || '--';
-    document.getElementById('locationName').textContent = state.location || '--';
-    document.getElementById('subtitle').textContent = state.movie && state.location
-      ? state.movie + ' at ' + state.location
-      : 'Select movie and location below';
+    renderTargets();
+    renderRecipients();
+    renderSettings();
     renderDates();
     updateStats();
+
+    const sub = document.getElementById('subtitle');
+    if (state.targets.length === 0) {
+      sub.textContent = 'No pairs configured — add one below';
+    } else if (state.targets.length === 1) {
+      sub.textContent = state.targets[0].movie + ' at ' + state.targets[0].location;
+    } else {
+      sub.textContent = 'Watching ' + state.targets.length + ' movie/location pairs';
+    }
   }
 
   function updateStatus(running) {
     const badge = document.getElementById('statusBadge');
-    const btnStart = document.getElementById('btnStart');
-    const btnStop = document.getElementById('btnStop');
+    document.getElementById('btnStart').disabled = running || state.targets.length === 0;
+    document.getElementById('btnStop').disabled = !running;
     if (running) {
       badge.textContent = 'WATCHING';
       badge.className = 'status-badge watching';
-      btnStart.disabled = true;
-      btnStop.disabled = false;
       startUptime();
     } else {
       badge.textContent = 'IDLE';
       badge.className = 'status-badge idle';
-      btnStart.disabled = false;
-      btnStop.disabled = true;
       stopUptime();
     }
   }
 
   function updateStats() {
     document.getElementById('statChecks').textContent = state.stats.checks;
-    document.getElementById('statDates').textContent = state.dates.length;
+    document.getElementById('statPairs').textContent = state.targets.length;
     document.getElementById('statAlerts').textContent = state.stats.alerts;
   }
 
-  function renderDates() {
-    const grid = document.getElementById('datesGrid');
-    if (!state.dates || state.dates.length === 0) {
-      grid.innerHTML = '<div class="no-dates">No dates available yet. Start monitoring to check.</div>';
+  function renderTargets() {
+    const list = document.getElementById('targetList');
+    if (state.targets.length === 0) {
+      list.innerHTML = '<div class="row-empty">Nothing being watched yet. Add a pair below.</div>';
       return;
     }
-    grid.innerHTML = state.dates.map(dateStr => {
-      const d = new Date(dateStr + 'T00:00:00');
-      const isNew = state.newDates.has(dateStr);
-      return `<div class="date-card ${isNew ? 'new-date' : ''}">
-        <div class="day-name">${DAY_NAMES[d.getDay()]}</div>
-        <div class="day-num">${d.getDate()}</div>
-        <div class="month">${MONTH_NAMES[d.getMonth()]}</div>
-      </div>`;
-    }).join('');
+    list.innerHTML = state.targets.map(t => `
+      <div class="row">
+        <div class="row-main">
+          <div class="row-title">${esc(t.movie || ('Movie ' + t.movie_id))}</div>
+          <div class="row-sub">${esc(t.location || ('Location ' + t.location_id))}</div>
+        </div>
+        <span class="pill">${(t.dates || []).length} dates</span>
+        <button class="btn-sm btn-danger" onclick="removeTarget('${esc(t.key)}')">Remove</button>
+      </div>`).join('');
   }
 
-  // --- Activity Log ---
+  function renderRecipients() {
+    const list = document.getElementById('recipientList');
+    if (state.recipients.length === 0) {
+      list.innerHTML = '<div class="row-empty">No Telegram recipients. Alerts will only reach the desktop.</div>';
+      return;
+    }
+    list.innerHTML = state.recipients.map(id => `
+      <div class="row">
+        <div class="row-main">
+          <div class="row-title">${esc(id)}</div>
+          <div class="row-sub">${String(id).startsWith('-') ? 'Group chat' : 'Direct message'}</div>
+        </div>
+        <button class="btn-sm btn-danger" onclick="removeRecipient('${esc(id)}')">Remove</button>
+      </div>`).join('');
+  }
+
+  function renderSettings() {
+    document.getElementById('setDesktop').checked = !!state.settings.desktop_enabled;
+    document.getElementById('setTelegram').checked = !!state.settings.telegram_enabled;
+    document.getElementById('setInterval').value = state.settings.interval_seconds || 60;
+    document.getElementById('tokenHint').textContent = state.settings.has_bot_token
+      ? 'Sent to everyone on the Recipients tab'
+      : 'No bot token configured — set TELEGRAM_BOT_TOKEN or config.yaml';
+  }
+
+  function renderDates() {
+    const wrap = document.getElementById('datesByTarget');
+    const withDates = state.targets.filter(t => (t.dates || []).length > 0);
+
+    if (withDates.length === 0) {
+      wrap.innerHTML = '<div class="no-dates">No dates yet. Start watching to check availability.</div>';
+      return;
+    }
+
+    wrap.innerHTML = withDates.map(t => `
+      <div class="target-block">
+        <div class="target-block-title">
+          ${esc(t.movie || ('Movie ' + t.movie_id))}
+          <span class="where">${esc(t.location || ('Location ' + t.location_id))}</span>
+        </div>
+        <div class="dates-grid">
+          ${t.dates.map(dateStr => {
+            const d = new Date(dateStr + 'T00:00:00');
+            const isNew = state.newDates.has(t.key + '|' + dateStr);
+            return `<div class="date-card ${isNew ? 'new-date' : ''}">
+              <div class="day-name">${DAY_NAMES[d.getDay()]}</div>
+              <div class="day-num">${d.getDate()}</div>
+              <div class="month">${MONTH_NAMES[d.getMonth()]}</div>
+            </div>`;
+          }).join('')}
+        </div>
+      </div>`).join('');
+  }
+
+  // --- Activity log ---
   function addLogEntry(event) {
     const container = document.getElementById('logContainer');
     const empty = container.querySelector('.log-empty');
@@ -573,21 +721,22 @@
 
     const entry = document.createElement('div');
     const ts = event.timestamp || new Date().toLocaleTimeString();
+    const where = event.movie ? `${event.movie} @ ${event.location}: ` : '';
     let icon = '', cssClass = 'log-info', msg = '';
 
     switch (event.type) {
       case 'check':
         icon = event.initial ? '&#128269;' : '&#10003;';
-        msg = event.initial
-          ? `Initial scan: ${(event.dates||[]).length} dates found`
-          : `Check #${event.count}: ${(event.dates||[]).length} dates available`;
+        msg = where + (event.initial
+          ? `initial scan, ${(event.dates||[]).length} dates`
+          : `${(event.dates||[]).length} dates, nothing new`);
         if (event.removed_dates && event.removed_dates.length > 0)
           msg += ` (${event.removed_dates.length} removed)`;
         break;
       case 'alert':
         icon = '&#127881;';
         cssClass = 'log-alert';
-        msg = `NEW DATES: ${(event.new_dates||[]).join(', ')}`;
+        msg = where + `NEW DATES: ${(event.new_dates||[]).join(', ')}`;
         break;
       case 'error':
         icon = '&#10007;';
@@ -606,22 +755,20 @@
     }
 
     entry.className = `log-entry ${cssClass}`;
-    entry.innerHTML = `<span class="log-time">${ts}</span>
+    entry.innerHTML = `<span class="log-time">${esc(ts)}</span>
       <span class="log-icon">${icon}</span>
-      <span class="log-msg">${msg}</span>`;
+      <span class="log-msg">${esc(msg)}</span>`;
     container.insertBefore(entry, container.firstChild);
     while (container.children.length > 50) container.removeChild(container.lastChild);
   }
 
-  // --- Uptime Timer ---
+  // --- Uptime ---
   function startUptime() {
     if (uptimeInterval) return;
     const start = state.stats.started_at ? new Date(state.stats.started_at) : new Date();
     uptimeInterval = setInterval(() => {
       const diff = Math.floor((Date.now() - start.getTime()) / 1000);
-      const h = Math.floor(diff / 3600);
-      const m = Math.floor((diff % 3600) / 60);
-      const s = diff % 60;
+      const h = Math.floor(diff / 3600), m = Math.floor((diff % 3600) / 60), s = diff % 60;
       document.getElementById('statUptime').textContent = h > 0 ? `${h}h ${m}m` : `${m}m ${s}s`;
     }, 1000);
   }
@@ -630,50 +777,26 @@
     document.getElementById('statUptime').textContent = '--';
   }
 
-  // --- Configuration ---
-  window.toggleConfig = function() {
-    const toggle = document.getElementById('configToggle');
-    const body = document.getElementById('configBody');
-    toggle.classList.toggle('open');
-    body.classList.toggle('open');
-  };
-
-  function setConfigStatus(text, cls) {
-    const el = document.getElementById('configStatus');
-    el.textContent = text;
-    el.className = 'config-status ' + (cls || '');
-  }
-
+  // --- Watchlist ---
   window.loadLocations = async function() {
     const btn = document.getElementById('btnLoadLocs');
     const sel = document.getElementById('locationSelect');
     btn.disabled = true;
-    setConfigStatus('', '');
-    document.getElementById('configStatus').innerHTML = '<span class="spinner"></span>Loading locations...';
-    document.getElementById('configStatus').className = 'config-status loading';
-
+    setStatus('targetStatus', '<span class="spinner"></span>Loading locations...', 'loading');
     try {
-      const res = await fetch('/api/locations');
-      const data = await res.json();
+      const data = await (await fetch('/api/locations')).json();
       if (!data.ok) throw new Error(data.message);
-
-      locationsCache = data.locations;
       sel.innerHTML = '<option value="">-- Select location --</option>';
       data.locations.forEach(loc => {
         const opt = document.createElement('option');
         opt.value = loc.id;
         opt.textContent = loc.locationTitle || loc.location_name || `Location ${loc.id}`;
-        opt.dataset.name = opt.textContent;
-        if (loc.id === state.locationId) opt.selected = true;
         sel.appendChild(opt);
       });
       sel.disabled = false;
-      setConfigStatus(`${data.locations.length} locations loaded`, 'success');
-
-      // Auto-load movies if location is pre-selected
-      if (sel.value) onLocationChange();
+      setStatus('targetStatus', `${data.locations.length} locations loaded`, 'success');
     } catch (e) {
-      setConfigStatus('Failed: ' + e.message, 'error');
+      setStatus('targetStatus', 'Failed: ' + esc(e.message), 'error');
     } finally {
       btn.disabled = false;
     }
@@ -682,130 +805,183 @@
   window.onLocationChange = async function() {
     const locSel = document.getElementById('locationSelect');
     const movSel = document.getElementById('movieSelect');
-    const locId = locSel.value;
+    document.getElementById('btnAddTarget').disabled = true;
 
-    if (!locId) {
+    if (!locSel.value) {
       movSel.innerHTML = '<option value="">-- Select location first --</option>';
       movSel.disabled = true;
-      document.getElementById('btnSave').disabled = true;
       return;
     }
 
     movSel.innerHTML = '<option value="">Loading movies...</option>';
     movSel.disabled = true;
-
     try {
-      const res = await fetch(`/api/movies?location_id=${locId}`);
-      const data = await res.json();
+      const data = await (await fetch(`/api/movies?location_id=${locSel.value}`)).json();
       if (!data.ok) throw new Error(data.message);
 
-      const running = data.running || [];
-      const upcoming = data.upcoming || [];
-      moviesCache = [...running, ...upcoming];
-
       movSel.innerHTML = '<option value="">-- Select movie --</option>';
-
-      if (running.length > 0) {
-        const group = document.createElement('optgroup');
-        group.label = 'Now Showing';
-        running.forEach(m => {
-          const opt = document.createElement('option');
-          opt.value = m.movie_id;
-          opt.textContent = m.title;
-          opt.dataset.name = m.title;
-          if (m.movie_id === state.movieId) opt.selected = true;
-          group.appendChild(opt);
+      [['Now Showing', data.running || []], ['Coming Soon', data.upcoming || []]]
+        .forEach(([label, movies]) => {
+          if (movies.length === 0) return;
+          const group = document.createElement('optgroup');
+          group.label = label;
+          movies.forEach(m => {
+            const opt = document.createElement('option');
+            opt.value = m.movie_id;
+            opt.textContent = m.title;
+            group.appendChild(opt);
+          });
+          movSel.appendChild(group);
         });
-        movSel.appendChild(group);
-      }
-
-      if (upcoming.length > 0) {
-        const group = document.createElement('optgroup');
-        group.label = 'Coming Soon';
-        upcoming.forEach(m => {
-          const opt = document.createElement('option');
-          opt.value = m.movie_id;
-          opt.textContent = m.title;
-          opt.dataset.name = m.title;
-          group.appendChild(opt);
-        });
-        movSel.appendChild(group);
-      }
-
       movSel.disabled = false;
-      movSel.onchange = function() {
-        document.getElementById('btnSave').disabled = !movSel.value;
-      };
-
-      // Enable save if movie was pre-selected
-      if (movSel.value) document.getElementById('btnSave').disabled = false;
     } catch (e) {
       movSel.innerHTML = '<option value="">Failed to load</option>';
-      setConfigStatus('Movies: ' + e.message, 'error');
+      setStatus('targetStatus', 'Movies: ' + esc(e.message), 'error');
     }
   };
 
-  window.saveConfig = async function() {
+  window.onMovieChange = function() {
+    document.getElementById('btnAddTarget').disabled =
+      !document.getElementById('movieSelect').value;
+  };
+
+  window.addTarget = async function() {
     const locSel = document.getElementById('locationSelect');
     const movSel = document.getElementById('movieSelect');
-    const btn = document.getElementById('btnSave');
-
     if (!locSel.value || !movSel.value) return;
 
-    const locOpt = locSel.options[locSel.selectedIndex];
-    const movOpt = movSel.options[movSel.selectedIndex];
-
+    const btn = document.getElementById('btnAddTarget');
     btn.disabled = true;
-    setConfigStatus('Saving...', 'loading');
-
+    setStatus('targetStatus', 'Adding...', 'loading');
     try {
-      const res = await fetch('/api/config', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          location_id: parseInt(locSel.value),
-          location_name: locOpt.dataset.name || locOpt.textContent,
-          movie_id: parseInt(movSel.value),
-          movie_name: movOpt.dataset.name || movOpt.textContent,
-        }),
+      const data = await postJSON('/api/targets/add', {
+        location_id: parseInt(locSel.value),
+        location_name: locSel.options[locSel.selectedIndex].textContent,
+        movie_id: parseInt(movSel.value),
+        movie_name: movSel.options[movSel.selectedIndex].textContent,
       });
-      const data = await res.json();
+      applyStatus(data);
+      setStatus('targetStatus', 'Added!', 'success');
+      movSel.value = '';
+    } catch (e) {
+      setStatus('targetStatus', esc(e.message), 'error');
+    } finally {
+      btn.disabled = !movSel.value;
+    }
+  };
+
+  window.removeTarget = async function(key) {
+    setStatus('targetStatus', 'Removing...', 'loading');
+    try {
+      applyStatus(await postJSON('/api/targets/remove', { key }));
+      setStatus('targetStatus', 'Removed', 'success');
+    } catch (e) {
+      setStatus('targetStatus', esc(e.message), 'error');
+    }
+  };
+
+  // --- Recipients ---
+  window.loadContacts = async function() {
+    const btn = document.getElementById('btnContacts');
+    const list = document.getElementById('contactList');
+    btn.disabled = true;
+    setStatus('contactStatus', '<span class="spinner"></span>Checking...', 'loading');
+    try {
+      const data = await (await fetch('/api/telegram/contacts')).json();
       if (!data.ok) throw new Error(data.message);
 
-      setConfigStatus('Saved!', 'success');
-      // Collapse config
-      setTimeout(() => {
-        document.getElementById('configToggle').classList.remove('open');
-        document.getElementById('configBody').classList.remove('open');
-      }, 1000);
+      if (data.contacts.length === 0) {
+        list.innerHTML = '<div class="row-empty">Nobody has messaged the bot in the last 24 hours. ' +
+          'Ask them to open the bot in Telegram, tap Start, and send a message — then check again.</div>';
+        setStatus('contactStatus', '', '');
+        return;
+      }
+      list.innerHTML = data.contacts.map(c => `
+        <div class="row">
+          <div class="row-main">
+            <div class="row-title">${esc(c.name || c.chat_id)}${c.username ? ' (@' + esc(c.username) + ')' : ''}</div>
+            <div class="row-sub">${esc(c.chat_id)} &middot; ${esc(c.type)}</div>
+          </div>
+          ${c.already_added
+            ? '<span class="pill ok">Added</span>'
+            : `<button class="btn-sm btn-save" onclick="addRecipient('${esc(c.chat_id)}')">Add</button>`}
+        </div>`).join('');
+      setStatus('contactStatus', `${data.contacts.length} found`, 'success');
     } catch (e) {
-      setConfigStatus('Error: ' + e.message, 'error');
+      setStatus('contactStatus', esc(e.message), 'error');
     } finally {
       btn.disabled = false;
     }
   };
 
-  // --- Monitor Controls ---
+  window.addRecipient = async function(chatId) {
+    setStatus('recipientStatus', 'Adding...', 'loading');
+    try {
+      applyStatus(await postJSON('/api/recipients/add', { chat_id: chatId }));
+      setStatus('recipientStatus', 'Added!', 'success');
+      loadContacts();
+    } catch (e) {
+      setStatus('recipientStatus', esc(e.message), 'error');
+    }
+  };
+
+  window.addRecipientManual = function() {
+    const input = document.getElementById('manualChatId');
+    const value = input.value.trim();
+    if (!value) return;
+    addRecipient(value).then(() => { input.value = ''; });
+  };
+
+  window.removeRecipient = async function(chatId) {
+    setStatus('recipientStatus', 'Removing...', 'loading');
+    try {
+      applyStatus(await postJSON('/api/recipients/remove', { chat_id: chatId }));
+      setStatus('recipientStatus', 'Removed', 'success');
+    } catch (e) {
+      setStatus('recipientStatus', esc(e.message), 'error');
+    }
+  };
+
+  // --- Settings ---
+  window.saveSettings = async function() {
+    setStatus('settingsStatus', 'Saving...', 'loading');
+    try {
+      applyStatus(await postJSON('/api/settings', {
+        interval_seconds: parseInt(document.getElementById('setInterval').value) || 60,
+        desktop_enabled: document.getElementById('setDesktop').checked,
+        telegram_enabled: document.getElementById('setTelegram').checked,
+      }));
+      setStatus('settingsStatus', 'Saved', 'success');
+    } catch (e) {
+      setStatus('settingsStatus', esc(e.message), 'error');
+    }
+  };
+
+  window.testNotify = async function() {
+    setStatus('settingsStatus', '<span class="spinner"></span>Sending...', 'loading');
+    try {
+      const data = await postJSON('/api/test-notify');
+      setStatus('settingsStatus', esc(data.message), 'success');
+    } catch (e) {
+      setStatus('settingsStatus', esc(e.message), 'error');
+    }
+  };
+
+  // --- Monitor controls ---
   window.startMonitor = async function() {
     document.getElementById('btnStart').disabled = true;
-    try {
-      const res = await fetch('/api/start', { method: 'POST' });
-      const data = await res.json();
-      if (!data.ok) addLogEntry({ type: 'error', message: data.message, timestamp: new Date().toLocaleTimeString() });
-    } catch (e) {
-      addLogEntry({ type: 'error', message: 'Failed to start: ' + e.message, timestamp: new Date().toLocaleTimeString() });
+    try { await postJSON('/api/start'); }
+    catch (e) {
+      addLogEntry({ type: 'error', message: e.message, timestamp: new Date().toLocaleTimeString() });
       document.getElementById('btnStart').disabled = false;
     }
   };
 
   window.stopMonitor = async function() {
     document.getElementById('btnStop').disabled = true;
-    try {
-      const res = await fetch('/api/stop', { method: 'POST' });
-      const data = await res.json();
-      if (!data.ok) addLogEntry({ type: 'error', message: data.message, timestamp: new Date().toLocaleTimeString() });
-    } catch (e) {
-      addLogEntry({ type: 'error', message: 'Failed to stop: ' + e.message, timestamp: new Date().toLocaleTimeString() });
+    try { await postJSON('/api/stop'); }
+    catch (e) {
+      addLogEntry({ type: 'error', message: e.message, timestamp: new Date().toLocaleTimeString() });
       document.getElementById('btnStop').disabled = false;
     }
   };
@@ -814,6 +990,7 @@
   if ('Notification' in window && Notification.permission === 'default') {
     Notification.requestPermission();
   }
+  refreshStatus();
   connect();
 })();
 </script>
