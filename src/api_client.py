@@ -36,6 +36,26 @@ class APIError(Exception):
     pass
 
 
+def _json_or_error(resp, context: str) -> dict | list:
+    """Parse a JSON response, or raise APIError describing what came back.
+
+    These APIs answer outages with an nginx error page and bot challenges with
+    Cloudflare HTML, both of which would otherwise surface as an opaque
+    JSONDecodeError traceback that says nothing about the actual cause.
+    """
+    try:
+        return resp.json()
+    except Exception:
+        body = (resp.text or "").strip()
+        if "cloudflare" in body[:600].lower() or "just a moment" in body[:600].lower():
+            reason = "blocked by Cloudflare (this IP is not trusted)"
+        elif resp.status_code >= 500:
+            reason = f"server error {resp.status_code} (the site is having trouble)"
+        else:
+            reason = f"non-JSON response ({resp.status_code})"
+        raise APIError(f"{context}: {reason}") from None
+
+
 def _load_cached_auth() -> tuple[str, str] | None:
     """Try loading a cached auth token. Returns (token, device_key) or None."""
     try:
@@ -204,7 +224,7 @@ class CineplexAPI:
         resp = await self.client.post(
             f"{TICKET_API}/{endpoint}", json=body or {}, headers=headers
         )
-        data = resp.json()
+        data = _json_or_error(resp, f"Ticket API /{endpoint}")
 
         if data.get("code") == 401:
             logger.info("Ticket token expired, re-authenticating...")
@@ -214,7 +234,7 @@ class CineplexAPI:
             resp = await self.client.post(
                 f"{TICKET_API}/{endpoint}", json=body or {}, headers=headers
             )
-            data = resp.json()
+            data = _json_or_error(resp, f"Ticket API /{endpoint}")
 
         if data.get("status") == "error":
             raise APIError(f"Ticket API /{endpoint}: {data.get('message')}")
@@ -235,9 +255,14 @@ class CineplexAPI:
             resp = await self.client.post(
                 f"{WEB_API}/login", json={"user_id": user_id}, headers=headers
             )
-            data = resp.json()
-            if data.get("status") == "success":
-                self.web_token = data["data"]
+            try:
+                data = _json_or_error(resp, "Web API /login")
+                if data.get("status") == "success":
+                    self.web_token = data["data"]
+            except APIError as e:
+                # Carry on unauthenticated — the real request below reports the
+                # failure with the caller's own context if it also fails.
+                logger.debug(f"Web API login unavailable: {e}")
 
         headers = {
             "Origin": "https://www.cineplexbd.com",
@@ -249,7 +274,7 @@ class CineplexAPI:
         resp = await self.client.post(
             f"{WEB_API}/{endpoint}", json=body or {}, headers=headers
         )
-        data = resp.json()
+        data = _json_or_error(resp, f"Web API /{endpoint}")
         return data.get("data", data)
 
     # --- Ticket API methods (actual purchasable dates) ---
