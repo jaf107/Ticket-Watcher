@@ -192,6 +192,41 @@ In CI, use `TELEGRAM_CHAT_IDS=111,222` (comma-separated) instead.
 
 ---
 
+## Running it automatically (macOS)
+
+The site refuses requests from datacenter IPs — both reCAPTCHA on the ticket
+API and Cloudflare on the web API — so hosted runners (GitHub Actions, and any
+free cloud host) cannot check for you. It has to run from a home connection.
+
+`ticketwatcher.plist.example` is a launchd agent that checks every 10 minutes
+while the Mac is awake:
+
+```sh
+sed "s|__PROJECT_DIR__|$PWD|g" ticketwatcher.plist.example \
+  > ~/Library/LaunchAgents/com.ticketwatcher.plist
+launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.ticketwatcher.plist
+```
+
+Check immediately with `launchctl kickstart gui/$UID/com.ticketwatcher`, watch
+it with `tail -f agent.log`, and stop it with
+`launchctl bootout gui/$UID/com.ticketwatcher`.
+
+Nothing runs between checks — launchd starts the process, it checks, it exits.
+
+## Starting again later
+
+`config.yaml` keeps your movies, cinemas, and Telegram recipients, so picking
+this back up is:
+
+```sh
+python main.py setup      # choose the new movie and cinemas
+python main.py dashboard  # or edit everything from the browser
+```
+
+State (`data/state.json`) and the cached login (`data/auth_cache.json`) are
+regenerated on the first run. Their absence just means the first check
+establishes a baseline silently instead of alerting on dates already listed.
+
 ## Troubleshooting
 - **Playwright errors:** Run `playwright install` again.
 - **Telegram not working:** Double-check your bot token, chat ID, and `.env` file.

@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Background checker for macOS. Runs one check every 10 minutes while the Mac
+  is awake; nothing stays resident between runs.
+
+  Install (replace __PROJECT_DIR__ with this folder's absolute path):
+
+    sed "s|__PROJECT_DIR__|$PWD|g" ticketwatcher.plist.example \
+      > ~/Library/LaunchAgents/com.ticketwatcher.plist
+    launchctl bootstrap gui/$UID ~/Library/LaunchAgents/com.ticketwatcher.plist
+
+  Check now:  launchctl kickstart gui/$UID/com.ticketwatcher
+  Stop:       launchctl bootout   gui/$UID/com.ticketwatcher
+  Remove:     rm ~/Library/LaunchAgents/com.ticketwatcher.plist
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.ticketwatcher</string>
+
+    <!-- One check per run. The watcher exits when done, so launchd owns the
+         schedule rather than a long-lived process that dies on sleep. -->
+    <key>ProgramArguments</key>
+    <array>
+        <string>__PROJECT_DIR__/.venv/bin/python</string>
+        <string>main.py</string>
+        <string>watch</string>
+        <string>--once</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>__PROJECT_DIR__</string>
+
+    <key>StartInterval</key>
+    <integer>600</integer>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>__PROJECT_DIR__/agent.log</string>
+    <key>StandardErrorPath</key>
+    <string>__PROJECT_DIR__/agent.log</string>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+        <key>PYTHONUNBUFFERED</key>
+        <string>1</string>
+    </dict>
+
+    <!-- A failing check must not spin: without this launchd would restart it
+         immediately and hammer the site. -->
+    <key>ThrottleInterval</key>
+    <integer>60</integer>
+</dict>
+</plist>
